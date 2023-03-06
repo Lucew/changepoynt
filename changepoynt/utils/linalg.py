@@ -1,11 +1,11 @@
 # this file contains utility functions for handling and computing matrices needed for some of the algorithms in this
 # package
 import numpy as np
-import numba as nb
-import scipy as sp
-import scipy.linalg
+from numba import jit
+from scipy.linalg import eigh_tridiagonal
 
-@nb.jit(nopython=True)
+
+@jit(nopython=True)
 def power_method(a_matrix: np.ndarray, x_vector: np.ndarray, n_iterations: int) -> (float, np.ndarray):
     """
     This function searches the largest (dominant) eigenvalue and corresponding eigenvector by repeated multiplication
@@ -39,7 +39,7 @@ def power_method(a_matrix: np.ndarray, x_vector: np.ndarray, n_iterations: int) 
     return eigenvalue, (a_matrix @ x_vector)/eigenvalue
 
 
-@nb.jit(nopython=True)
+@jit(nopython=True)
 def lanczos(a_matrix: np.ndarray, r_0: np.ndarray, k: int) -> (np.ndarray, np.ndarray):
     """
     This function computes the tri-diagonalization matrix from the square matrix C which is the result of the lanczos
@@ -108,8 +108,8 @@ def tridiagonal_eigenvalues(alphas: np.ndarray, betas: np.ndarray, amount=-1):
     assert alphas.shape[0] - 1 == betas.shape[0], 'Alpha size needs to be exactly one bigger than beta size.'
 
     # compute the decomposition
-    eigenvalues, eigenvectors = sp.linalg.eigh_tridiagonal(d=alphas, e=betas, select='i',
-                                                           select_range=(alphas.shape[0]-amount, alphas.shape[0]-1))
+    eigenvalues, eigenvectors = eigh_tridiagonal(d=alphas, e=betas,
+                                                 select='i', select_range=(alphas.shape[0]-amount, alphas.shape[0]-1))
 
     # return them to be in sinking order
     return eigenvalues[::-1], eigenvectors[:, ::-1]
