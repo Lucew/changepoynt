@@ -33,6 +33,7 @@ class TestLinearAlgebra:
 
     def test_eig_tridiag(self):
         # take a look at the highest half of the eigenvalues as lower one might be unstable
+        # https://stackoverflow.com/questions/46345217/diagonalization-of-a-tridiagonal-symmetric-sparse-matrix-with-python
         amount = self.d.shape[0]//2
         tri_eigvals, tri_eigvecs = tridiagonal_eigenvalues(self.d, self.e, amount)
         eigvecs, eigvals, _ = np.linalg.svd(self.T)

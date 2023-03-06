@@ -132,10 +132,11 @@ if __name__ == '__main__':
     print(eigval, eigvals[0])
 
     # test the tridiagonalization method
-    d = 3 * np.random.rand(1000)
-    e = -1 * np.random.rand(999)
+    size = 1000
+    d = 3 * np.random.rand(size)
+    e = -1 * np.random.rand(size-1)
     start = time.time()
-    tri_eigvals, tri_eigvecs = tridiagonal_eigenvalues(d, e, 50)
+    tri_eigvals, tri_eigvecs = tridiagonal_eigenvalues(d, e, size//2)
     print(f'Specialized tridiagonal SVD took: {time.time()-start} s.')
     T = np.diag(d) + np.diag(e, k=1) + np.diag(e, k=-1)
     start = time.time()
