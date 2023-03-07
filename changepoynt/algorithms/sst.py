@@ -186,7 +186,7 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
         if method == 'svd':
 
             # compute the outlier score using the svd method
-            score[idx] = _sst_svd(hankel_past, hankel_future, rank)
+            score[idx] = _singular_value_decomposition(hankel_past, hankel_future, rank)
 
         else:
             # method has not been implemented
@@ -238,7 +238,7 @@ def _implicit_krylov_approximation(hankel_past, hankel_future, x0, rank, lanczos
     :param x0: the initialization value for the power method applied to H2 to find the dominant eigenvector
     :param rank: the amount of (approximated) eigenvectors as subspace of H1
     :param lanczos_rank: the rank of the approximation of the "eigensignals"
-    :return: The change point score, the new dominant eigenvector of H2 for the feedback into the next H2
+    :return: the change point score, the new dominant eigenvector of H2 for the feedback into the next H2
     """
 
     # compute the biggest eigenvector of the hankel matrix after the possible change point (h2)
@@ -261,4 +261,30 @@ def _implicit_krylov_approximation(hankel_past, hankel_future, x0, rank, lanczos
 
 @jit(nopython=True)
 def _singular_value_decomposition(hankel_past, hankel_future, rank):
-    pass
+    """
+    This function implements change point detection using singular value decomposition as proposed in:
+
+    Idé, Tsuyoshi, and Keisuke Inoue.
+    "Knowledge discovery from heterogeneous dynamic systems using change-point correlations."
+    Proceedings of the 2005 SIAM international conference on data mining.
+    Society for Industrial and Applied Mathematics, 2005.
+
+    :param hankel_past: the hankel matrix H1 before the change point
+    :param hankel_future: the hankel matrix H2 after the change point
+    :param rank: the amount of (approximated) eigenvectors as subspace of H1
+    :return: the change point score
+    """
+
+    # compute the eigenvectors of the past hankel matrix
+    eigvecs_past, _, _ = np.linalg.svd(hankel_past, full_matrices=False)
+
+    # compute the dominant eigenvector of the future time series
+    x0 = np.random.rand(hankel_future.shape[1])
+    x0 /= np.linalg.norm(x0)
+    _, eigvec_future = lg.power_method(hankel_future, x0, n_iter=100)
+
+    # compute the normalized projections
+    alpha = eigvecs_past[:, :rank].T @ eigvec_future
+    alpha /= np.linalg.norm(alpha)
+
+    return 1 - alpha.T @ eigvec_future
