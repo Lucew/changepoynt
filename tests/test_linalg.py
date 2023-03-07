@@ -1,7 +1,7 @@
 # this file contains the tests for the linalg.py file in the utils of this package
 import pytest
 import numpy as np
-from changepoynt.utils.linalg import power_method, lanczos, tridiagonal_eigenvalues
+from changepoynt.utils.linalg import power_method, lanczos, tridiagonal_eigenvalues, highest_k_eigenvectors
 
 
 class TestLinearAlgebra:
@@ -28,7 +28,7 @@ class TestLinearAlgebra:
     def test_power_method(self):
         eigval, eigvec = power_method(self.A, self.x0, n_iterations=100)
         eigvecs, eigvals, _ = np.linalg.svd(self.A)
-        np.testing.assert_almost_equal(np.abs(eigval), np.abs(eigvals[0]))
+        np.testing.assert_almost_equal(eigval, eigvals[0])
         np.testing.assert_almost_equal(np.abs(eigvec), np.abs(eigvecs[:, 0]))
 
     def test_eig_tridiag(self):
@@ -39,6 +39,20 @@ class TestLinearAlgebra:
         eigvecs, eigvals, _ = np.linalg.svd(self.T)
         np.testing.assert_almost_equal(tri_eigvals, eigvals[:amount])
         np.testing.assert_almost_equal(np.abs(tri_eigvecs), np.abs(eigvecs[:, :amount]))
+
+    def test_k_highest_eigenvectors(self):
+        k = 20
+        k_eigvals, k_eigvecs = highest_k_eigenvectors(self.A, k)
+        eigvecs, eigvals, _ = np.linalg.svd(self.A)
+
+        # order is not guaranteed by the method, so we need to sort in decreasing order
+        idx = np.argsort(k_eigvals)[::-1]
+        k_eigvals = k_eigvals[idx]
+        k_eigvecs = k_eigvecs[:, idx]
+
+        # compare the values
+        np.testing.assert_almost_equal(k_eigvals, eigvals[:k])
+        np.testing.assert_almost_equal(np.abs(k_eigvecs), np.abs(eigvecs[:, :k]))
 
 
 if __name__ == "__main__":

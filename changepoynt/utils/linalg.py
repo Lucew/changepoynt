@@ -3,6 +3,7 @@
 import numpy as np
 from numba import jit
 from scipy.linalg import eigh_tridiagonal
+from scipy.sparse.linalg import svds
 
 
 @jit(nopython=True)
@@ -113,6 +114,22 @@ def tridiagonal_eigenvalues(alphas: np.ndarray, betas: np.ndarray, amount=-1):
 
     # return them to be in sinking order
     return eigenvalues[::-1], eigenvectors[:, ::-1]
+
+
+def highest_k_eigenvectors(a_matrix: np.ndarray, k: int) -> (np.ndarray, np.ndarray):
+    """
+    This function uses the Rayleigh-Ritz method implemented in ARPACK to compute the k highest eigenvalues and
+    corresponding eigenvectors. It should be faster as a complete svd.
+
+    !NOTE!:
+    The order of the k highest eigenvalues is not guaranteed by this method!
+
+    :param a_matrix: 2D-Matrix filled with floats for which we want to find the left eigenvectors
+    :param k: the amount of highest eigenvectors we want to find
+    :return: returns the eigenvalues and eigenvectors as numpy arrays
+    """
+    eigenvectors, eigenvalues, _ = svds(a_matrix, k=k)
+    return eigenvalues, eigenvectors
 
 
 if __name__ == '__main__':

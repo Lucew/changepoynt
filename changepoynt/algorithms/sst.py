@@ -90,7 +90,7 @@ class SingularSpectrumTransformation:
         self.noise = feedback_noise_level
 
         # specify the methods and their corresponding functions as lambda functions expecting only the future and
-        #  the current hankel matrix, all other parameter should be specified as values in the partial lambda function
+        # the current hankel matrix, all other parameter should be specified as values in the partial lambda function
         self.methods = {'ika', 'svd'}
 
         # check whether the method is correct
@@ -259,7 +259,6 @@ def _implicit_krylov_approximation(hankel_past, hankel_future, x0, rank, lanczos
     return 1 - (eigvecs[0, :] * eigvecs[0, :]).sum(), u
 
 
-@jit(nopython=True)
 def _singular_value_decomposition(hankel_past, hankel_future, rank):
     """
     This function implements change point detection using singular value decomposition as proposed in:
@@ -275,31 +274,32 @@ def _singular_value_decomposition(hankel_past, hankel_future, rank):
     :return: the change point score
     """
 
-    # compute the eigenvectors of the past hankel matrix
-    eigvecs_past, _, _ = np.linalg.svd(hankel_past, full_matrices=False)
+    # compute the rank highest eigenvectors of the past hankel matrix
+    eigvecs_past, _ = lg.highest_k_eigenvectors(hankel_past, rank)
 
     # compute the dominant eigenvector of the future time series
     x0 = np.random.rand(hankel_future.shape[1])
     x0 /= np.linalg.norm(x0)
-    _, eigvec_future = lg.power_method(hankel_future, x0, n_iter=100)
+    _, eigvec_future = lg.power_method(hankel_future, x0, n_iterations=20)
 
     # compute the normalized projections
-    alpha = eigvecs_past[:, :rank].T @ eigvec_future
-    alpha /= np.linalg.norm(alpha)
-
-    return 1 - alpha.T @ eigvec_future
+    alpha = eigvec_future - eigvecs_past @ eigvecs_past.T @ eigvec_future
+    return 1 - alpha.T @ alpha
 
 
 if __name__ == '__main__':
 
     # make synthetic step function
+    np.random.seed(123)
     x = np.hstack([1 * np.ones(1000) + np.random.rand(1000) * 1,
                    3 * np.ones(1000) + np.random.rand(1000) * 2,
                    5 * np.ones(1000) + np.random.rand(1000) * 1.5])
-    x += + np.random.rand(x.size)
+    x += np.random.rand(x.size)
 
     # create the sst method
-    sst = SingularSpectrumTransformation(30)
+    ika_sst = SingularSpectrumTransformation(31, method='ika')
+    svd_sst = SingularSpectrumTransformation(31, method='svd')
 
     # make the scoring
-    sst.transform(x)
+    ika_sst.transform(x)
+    svd_sst.transform(x)
