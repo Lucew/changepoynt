@@ -35,7 +35,7 @@ class SingularSpectrumTransformation:
     to input the specified types as the program will break in unforeseen ways otherwise.
     """
 
-    def __init__(self, window_length: int, n_windows: int = None, lag: int = None, rank: int = None, scale: bool = True,
+    def __init__(self, window_length: int, n_windows: int = None, lag: int = None, rank: int = 5, scale: bool = True,
                  method: str = 'ika', lanczos_rank: int = None, feedback_noise_level: float = 1e-3):
         """
         Initializing the Singular Spectrum Transformation (SST) requires setting a lot of parameters. See the parameters
@@ -103,7 +103,7 @@ class SingularSpectrumTransformation:
             self.lag = min(self.window_length//2, 1)
         if self.lanczos_rank is None:
             # make rank even and multiply by two just as specified in [2]
-            self.lanczos_rank = (self.rank - self.rank & 1)*2
+            self.lanczos_rank = (self.rank - (self.rank & 1))*2
 
     def transform(self, time_series: np.ndarray) -> np.ndarray:
         """
@@ -133,11 +133,12 @@ class SingularSpectrumTransformation:
             time_series = time_series.copy()
 
         # start the scaling itself by calling the jit compiled staticmethod and return the result
-        score = self._transform()
+        score = _transform(time_series=time_series, start_idx=starting_point, window_length=self.window_length,
+                           n_windows=self.n_windows, lag=self.lag, rank=self.rank, method=self.method,
+                           lanczos_rank=self.lanczos_rank, feedback_noise_level=self.noise)
         return score
 
 
-@jit(nopython=True)
 def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_windows: int, lag: int, rank: int,
                method: str, lanczos_rank, feedback_noise_level: float = 1e-3):
     """
@@ -152,7 +153,7 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
     :param rank: amount of eigenvectors used to span the subspace
     :param method: scoring method for the change point score
     :param lanczos_rank: rank of approximation for the implicit eigenvectors
-    :param feedback_noise_level: amplitude of noise added to the feedback dominant eigenvector of future hankell
+    :param feedback_noise_level: amplitude of noise added to the feedback dominant eigenvector of future hankel
     """
 
     # create initial vector for ika method with feedback dominant eigenvector as proposed in [2]
@@ -166,7 +167,7 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
     score = np.zeros_like(time_series)
 
     # iterate over all the values in the signal starting at start_idx computing the change point score
-    for idx in range(start_idx, time_series.shape[0]+1):
+    for idx in range(start_idx, time_series.shape[0]):
 
         # compile the past hankel matrix (H1)
         hankel_past = _compile_hankel(time_series, idx-lag, window_length, n_windows)
@@ -183,7 +184,7 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
             # add noise to the initial vector and normalize the vector
             x0 = x1 + feedback_noise_level * np.random.rand(x0.size)
             x0 /= np.linalg.norm(x0)
-        if method == 'svd':
+        elif method == 'svd':
 
             # compute the outlier score using the svd method
             score[idx] = _singular_value_decomposition(hankel_past, hankel_future, rank)
@@ -204,9 +205,9 @@ def _compile_hankel(time_series, end_index, window_size, rank):
 
     :param time_series: 1D array with float values as the time series
     :param end_index: the index (point in time) where the time series starts
-    :param window_size: the size of the windows cutted from the time series
+    :param window_size: the size of the windows cut from the time series
     :param rank: the amount of time series in the matrix
-    :return: The hankell matrix with lag one
+    :return: The hankel matrix with lag one
     """
 
     # make an empty matrix to place the values
@@ -221,7 +222,6 @@ def _compile_hankel(time_series, end_index, window_size, rank):
     return hankel
 
 
-@jit(nopython=True)
 def _implicit_krylov_approximation(hankel_past, hankel_future, x0, rank, lanczos_rank):
     """
     This function computes the change point score based on the krylov subspace approximation of the SST as proposed in
@@ -242,7 +242,7 @@ def _implicit_krylov_approximation(hankel_past, hankel_future, x0, rank, lanczos
     """
 
     # compute the biggest eigenvector of the hankel matrix after the possible change point (h2)
-    _, u = lg.power_method(hankel_future, x0, n_iter=10)
+    _, u = lg.power_method(hankel_future, x0, n_iterations=10)
 
     # compute the empirical covariance matrix before the possible change point (H1)
     c_1 = hankel_past.T @ hankel_past
@@ -252,7 +252,7 @@ def _implicit_krylov_approximation(hankel_past, hankel_future, x0, rank, lanczos
 
     # compute the singular value decomposition of the tridiagonal matrix (only the biggest)
     # by rule of thumb:
-    eigvecs, _ = lg.tridiagonal_eigenvalues(alphas, betas, rank)
+    _, eigvecs = lg.tridiagonal_eigenvalues(alphas, betas, rank)
 
     # compute the similarity score as defined in the ika sst paper and also return our u for the
     # feedback loop in figure 3 of the paper
@@ -288,3 +288,18 @@ def _singular_value_decomposition(hankel_past, hankel_future, rank):
     alpha /= np.linalg.norm(alpha)
 
     return 1 - alpha.T @ eigvec_future
+
+
+if __name__ == '__main__':
+
+    # make synthetic step function
+    x = np.hstack([1 * np.ones(1000) + np.random.rand(1000) * 1,
+                   3 * np.ones(1000) + np.random.rand(1000) * 2,
+                   5 * np.ones(1000) + np.random.rand(1000) * 1.5])
+    x += + np.random.rand(x.size)
+
+    # create the sst method
+    sst = SingularSpectrumTransformation(30)
+
+    # make the scoring
+    sst.transform(x)
