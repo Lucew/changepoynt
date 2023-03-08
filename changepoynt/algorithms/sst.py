@@ -111,7 +111,7 @@ class SingularSpectrumTransformation:
             self.lag = max(self.n_windows//2, 1)
         if self.lanczos_rank is None:
             # make rank even and multiply by two just as specified in [2]
-            self.lanczos_rank = (self.rank - (self.rank & 1))*2
+            self.lanczos_rank = self.rank * 2 - (self.rank & 1)
         if self.random_rank is None:
             # compute the rank as specified in [3] and
             # https://scikit-learn.org/stable/modules/generated/sklearn.utils.extmath.randomized_svd.html
@@ -124,14 +124,12 @@ class SingularSpectrumTransformation:
         # all other parameter should be specified as values in the partial lambda function
         self.methods = {'ika': partial(_implicit_krylov_approximation,
                                        rank=self.rank,
-                                       lanczos_rank=self.lanczos_rank,
-                                       feedback_noise_level=self.noise),
+                                       lanczos_rank=self.lanczos_rank),
                         'svd': partial(_singular_value_decomposition,
                                        rank=self.rank),
                         'rsvd': partial(_randomized_singular_value_decomposition,
                                         rank=self.rank,
-                                        randomized_rank=self.lanczos_rank,
-                                        feedback_noise_level=self.noise
+                                        randomized_rank=self.lanczos_rank
                                         )}
 
         # check whether the method is correct
@@ -204,7 +202,11 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
         hankel_future = _compile_hankel(time_series, idx, window_length, n_windows)
 
         # compute the score and save the returned feedback vector
-        score[idx], x0 = scoring_function(hankel_past, hankel_future, x0)
+        score[idx], x1 = scoring_function(hankel_past, hankel_future, x0)
+
+        # add noise to the dominant eigenvector and normalize it again
+        x0 = x1 + 1e-3 * np.random.rand(x0.size)
+        x0 /= np.linalg.norm(x0)
 
     return score
 
@@ -236,7 +238,7 @@ def _compile_hankel(time_series: np.ndarray, end_index: int, window_size: int, r
 
 
 def _implicit_krylov_approximation(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
-                                   rank: int, lanczos_rank: int, feedback_noise_level: float) -> (float, np.ndarray):
+                                   rank: int, lanczos_rank: int) -> (float, np.ndarray):
     """
     This function computes the change point score based on the krylov subspace approximation of the SST as proposed in
 
@@ -267,12 +269,7 @@ def _implicit_krylov_approximation(hankel_past: np.ndarray, hankel_future: np.nd
     alphas, betas = lg.lanczos(c_1, eigvec_future, lanczos_rank)
 
     # compute the singular value decomposition of the tridiagonal matrix (only the biggest)
-    # by rule of thumb:
     _, eigvecs = lg.tridiagonal_eigenvalues(alphas, betas, rank)
-
-    # add noise to the dominant eigenvector and normalize it again
-    eigvec_future = eigvec_future + feedback_noise_level * np.random.rand(eigvec_future.size)
-    eigvec_future /= np.linalg.norm(eigvec_future)
 
     # compute the similarity score as defined in the ika sst paper and also return our u for the
     # feedback loop in figure 3 of the paper
@@ -312,7 +309,7 @@ def _singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.nda
 
 
 def _randomized_singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
-                                             rank: int, randomized_rank: int, feedback_noise_level: float):
+                                             rank: int, randomized_rank: int):
     """
     This function implements the idea of
 
@@ -381,10 +378,6 @@ def _randomized_singular_value_decomposition(hankel_past: np.ndarray, hankel_fut
     # compute the biggest eigenvector of the hankel matrix after the possible change point (h2)
     c_2 = hankel_future.T @ hankel_future
     _, eigvec_future = lg.power_method(c_2, x0, n_iterations=1)
-
-    # add noise to the dominant eigenvector and normalize it again
-    eigvec_future = eigvec_future + feedback_noise_level * np.random.rand(eigvec_future.size)
-    eigvec_future /= np.linalg.norm(eigvec_future)
 
     # compute the projection distance
     alpha = eigenvecs_past[:, :rank].T @ eigvec_future
