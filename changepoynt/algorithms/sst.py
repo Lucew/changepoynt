@@ -325,61 +325,25 @@ def _randomized_singular_value_decomposition(hankel_past: np.ndarray, hankel_fut
     Proceedings of the 2007 SIAM International Conference on Data Mining.
     Society for Industrial and Applied Mathematics, 2007.
 
-    in contrast to the first two papers, the method uses randomized singular value decomposition as surveyed and
-    described in
-
-    Halko, Nathan, Per-Gunnar Martinsson, and Joel A. Tropp.
-    "Finding structure with randomness: Probabilistic algorithms for constructing approximate matrix decompositions."
-    SIAM review 53.2 (2011): 217-288.
-
-    on page 4 chapter 1.3 and further.
-
-    It also incoporates ideas from
-
-    Szlam, Arthur, Yuval Kluger, and Mark Tygert.
-    "An implementation of a randomized algorithm for principal component analysis."
-    arXiv preprint arXiv:1412.3510 (2014).
-
-    in order to further imprint the highest eigenvectors into the approximation matrix after multiplying with the
-    randomized matrix.
-
-    This implementation is generally inspired by
-    https://scikit-learn.org/stable/modules/generated/sklearn.utils.extmath.randomized_svd.html
-    but reimplemented as we wanted to save dependencies and use jit compiled code.
+    in contrast to the first two papers, the method uses randomized singular value decomposition.
 
     :param hankel_past: the hankel matrix H1 before the change point
     :param hankel_future: the hankel matrix H2 after the change point
     :param x0: the initialization value for the power method applied to H2 to find the dominant eigenvector
     :param rank: the amount of (approximated) eigenvectors as subspace of H1
     :param randomized_rank: the rank of the approximation used to construct the noise matrix
-    :param feedback_noise_level: the noise that will be added to the dominant eigenvector after we are finished
     :return: the change point score, the new dominant eigenvector of H2 for the feedback into the next H2
     """
-
-    # construct the random matrix for multiplication with the hankell matrix
-    approximation_matrix = np.random.normal(size=(hankel_past.shape[1], randomized_rank))
-
-    # perform power iterations to further "enhance" the top singular of the hankel matrix into Q
-    for _ in range(3):
-        approximation_matrix = hankel_past.T @ hankel_past @ approximation_matrix
-
-    # extract the orthonormal base of the approximation matrix
-    q_substitute, _ = np.linalg.qr(hankel_past @ approximation_matrix, mode='economic')
-
-    # project the hankel matrix onto the lower dimensional orthonormal basis of the approximation matrix
-    base_projection = q_substitute.T @ hankel_past
-
-    # compute the singular vector decomposition of the thinner matrix base projection
-    eigenvecs_past, _, _ = np.linalg.svd(base_projection, full_matrices=False, lapack_driver='gesdd')
-
-    # compute the original eigenvectors
-    eigenvecs_past = np.dot(q_substitute, eigenvecs_past)
 
     # compute the biggest eigenvector of the hankel matrix after the possible change point (h2)
     c_2 = hankel_future.T @ hankel_future
     _, eigvec_future = lg.power_method(c_2, x0, n_iterations=1)
 
-    # compute the projection distance
+    # compute the eigenvectors of the past hankel matrix
+    c_1 = hankel_past.T @ hankel_past
+    _, eigenvecs_past = lg.randomized_singular_value_decomposition(c_1, randomized_rank=randomized_rank)
+
+    # compute the change point score as defined in the papers
     alpha = eigenvecs_past[:, :rank].T @ eigvec_future
     return 1-alpha.T @ alpha, eigvec_future
 
