@@ -1,7 +1,7 @@
 # this file contains the tests for the linalg.py file in the utils of this package
 import pytest
 import numpy as np
-from changepoynt.utils.linalg import power_method, lanczos, tridiagonal_eigenvalues, highest_k_eigenvectors
+import changepoynt.utils.linalg as lg
 
 
 class TestLinearAlgebra:
@@ -26,7 +26,7 @@ class TestLinearAlgebra:
         pass
 
     def test_power_method(self):
-        eigval, eigvec = power_method(self.A, self.x0, n_iterations=100)
+        eigval, eigvec = lg.power_method(self.A, self.x0, n_iterations=100)
         eigvecs, eigvals, _ = np.linalg.svd(self.A)
         np.testing.assert_almost_equal(eigval, eigvals[0])
         np.testing.assert_almost_equal(np.abs(eigvec), np.abs(eigvecs[:, 0]))
@@ -35,14 +35,14 @@ class TestLinearAlgebra:
         # take a look at the highest half of the eigenvalues as lower one might be unstable
         # https://stackoverflow.com/questions/46345217/diagonalization-of-a-tridiagonal-symmetric-sparse-matrix-with-python
         amount = self.d.shape[0]//2
-        tri_eigvals, tri_eigvecs = tridiagonal_eigenvalues(self.d, self.e, amount)
+        tri_eigvals, tri_eigvecs = lg.tridiagonal_eigenvalues(self.d, self.e, amount)
         eigvecs, eigvals, _ = np.linalg.svd(self.T)
         np.testing.assert_almost_equal(tri_eigvals, eigvals[:amount])
         np.testing.assert_almost_equal(np.abs(tri_eigvecs), np.abs(eigvecs[:, :amount]))
 
     def test_k_highest_eigenvectors(self):
         k = 20
-        k_eigvals, k_eigvecs = highest_k_eigenvectors(self.A, k)
+        k_eigvals, k_eigvecs = lg.highest_k_eigenvectors(self.A, k)
         eigvecs, eigvals, _ = np.linalg.svd(self.A)
 
         # order is not guaranteed by the method, so we need to sort in decreasing order
@@ -53,6 +53,15 @@ class TestLinearAlgebra:
         # compare the values
         np.testing.assert_almost_equal(k_eigvals, eigvals[:k])
         np.testing.assert_almost_equal(np.abs(k_eigvecs), np.abs(eigvecs[:, :k]))
+
+    def test_randomized_svd(self):
+        k = 5
+        k_eigvals, k_eigvecs = lg.randomized_singular_value_decomposition(self.A, 50)
+        eigvecs, eigvals, _ = np.linalg.svd(self.A)
+
+        # compare the values
+        np.testing.assert_almost_equal(k_eigvals[:k], eigvals[:k])
+        np.testing.assert_almost_equal(np.abs(k_eigvecs[:, :k]), np.abs(eigvecs[:, :k]))
 
 
 if __name__ == "__main__":
