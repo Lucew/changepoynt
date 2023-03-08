@@ -23,11 +23,12 @@ def power_method(a_matrix: np.ndarray, x_vector: np.ndarray, n_iterations: int) 
 
     # go through the iterations and continue to scale the returned vector, so we do not reach extreme values
     # during the iteration we scale the vector by its maximum as we can than easily extract the eigenvalue
+    a_square = a_matrix.T @ a_matrix
     for _ in range(n_iterations):
 
         # multiplication with a_matrix.T @ a_matrix as can be seen in explanation of
         # https://numpy.org/doc/stable/reference/generated/numpy.linalg.svd.html
-        x_vector = a_matrix.T @ a_matrix @ x_vector
+        x_vector = a_square @ x_vector
 
         # scale the vector so we keep the values in bound
         x_vector = x_vector / np.max(x_vector)
@@ -165,8 +166,9 @@ def randomized_singular_value_decomposition(a_matrix: np.ndarray, randomized_ran
     approximation_matrix = np.random.normal(size=(a_matrix.shape[1], randomized_rank))
 
     # perform power iterations to further "enhance" the top singular of the hankel matrix into Q
+    a_square = a_matrix.T @ a_matrix
     for _ in range(3):
-        approximation_matrix = a_matrix.T @ a_matrix @ approximation_matrix
+        approximation_matrix = a_square @ approximation_matrix
 
     # extract the orthonormal base of the approximation matrix
     q_substitute, _ = np.linalg.qr(a_matrix @ approximation_matrix)
