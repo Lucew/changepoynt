@@ -252,31 +252,31 @@ def _implicit_krylov_approximation(hankel_past: np.ndarray, hankel_future: np.nd
     :param x0: the initialization value for the power method applied to H2 to find the dominant eigenvector
     :param rank: the amount of (approximated) eigenvectors as subspace of H1
     :param lanczos_rank: the rank of the approximation of the "eigensignals"
+    :param feedback_noise_level: the noise that will be added to the dominant eigenvector after we are finished
     :return: the change point score, the new dominant eigenvector of H2 for the feedback into the next H2
     """
 
     # compute the biggest eigenvector of the hankel matrix after the possible change point (h2)
     c_2 = hankel_future.T @ hankel_future
-    _, u = lg.power_method(c_2, x0, n_iterations=1)
+    _, eigvec_future = lg.power_method(c_2, x0, n_iterations=1)
 
     # compute the empirical covariance matrix before the possible change point (H1)
     c_1 = hankel_past.T @ hankel_past
 
     # compute the tridiagonal matrix from c1
-    alphas, betas = lg.lanczos(c_1, u, lanczos_rank)
+    alphas, betas = lg.lanczos(c_1, eigvec_future, lanczos_rank)
 
     # compute the singular value decomposition of the tridiagonal matrix (only the biggest)
     # by rule of thumb:
     _, eigvecs = lg.tridiagonal_eigenvalues(alphas, betas, rank)
 
+    # add noise to the dominant eigenvector and normalize it again
+    eigvec_future = eigvec_future + feedback_noise_level * np.random.rand(eigvec_future.size)
+    eigvec_future /= np.linalg.norm(eigvec_future)
+
     # compute the similarity score as defined in the ika sst paper and also return our u for the
     # feedback loop in figure 3 of the paper
-
-    # add noise to the initial vector and normalize the vector
-    x0 = x0 + feedback_noise_level * np.random.rand(x0.size)
-    x0 /= np.linalg.norm(x0)
-
-    return 1 - (eigvecs[0, :] * eigvecs[0, :]).sum(), u
+    return 1 - (eigvecs[0, :] * eigvecs[0, :]).sum(), eigvec_future
 
 
 def _singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
@@ -294,7 +294,7 @@ def _singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.nda
     :param x0: highest eigenvector of previous iteration (will be ignored in this function and is just added to complete
     the function signature, i.e. input and output size, to be compatible with other methods)
     :param rank: the amount of (approximated) eigenvectors as subspace of H1
-    :return: the change point score
+    :return: the change point score, the input vector x0
     """
 
     # compute the rank highest eigenvectors of the past hankel matrix
@@ -303,7 +303,8 @@ def _singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.nda
     # compute the dominant eigenvector of the future time series
     x0 = np.random.rand(hankel_future.shape[1])
     x0 /= np.linalg.norm(x0)
-    _, eigvec_future = lg.power_method(hankel_future, x0, n_iterations=20)
+    c_2 = hankel_future.T @ hankel_future
+    _, eigvec_future = lg.power_method(c_2, x0, n_iterations=20)
 
     # compute the projection distance
     alpha = eigvecs_past.T @ eigvec_future
@@ -312,7 +313,82 @@ def _singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.nda
 
 def _randomized_singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
                                              rank: int, randomized_rank: int, feedback_noise_level: float):
-    pass
+    """
+    This function implements the idea of
+
+    Idé, Tsuyoshi, and Keisuke Inoue.
+    "Knowledge discovery from heterogeneous dynamic systems using change-point correlations."
+    Proceedings of the 2005 SIAM international conference on data mining.
+    Society for Industrial and Applied Mathematics, 2005.
+
+    but uses a feedback vector for the future dominant eigenvector as proposed in
+
+    Idé, Tsuyoshi, and Koji Tsuda.
+    "Change-point detection using krylov subspace learning."
+    Proceedings of the 2007 SIAM International Conference on Data Mining.
+    Society for Industrial and Applied Mathematics, 2007.
+
+    in contrast to the first two papers, the method uses randomized singular value decomposition as surveyed and
+    described in
+
+    Halko, Nathan, Per-Gunnar Martinsson, and Joel A. Tropp.
+    "Finding structure with randomness: Probabilistic algorithms for constructing approximate matrix decompositions."
+    SIAM review 53.2 (2011): 217-288.
+
+    on page 4 chapter 1.3 and further.
+
+    It also incoporates ideas from
+
+    Szlam, Arthur, Yuval Kluger, and Mark Tygert.
+    "An implementation of a randomized algorithm for principal component analysis."
+    arXiv preprint arXiv:1412.3510 (2014).
+
+    in order to further imprint the highest eigenvectors into the approximation matrix after multiplying with the
+    randomized matrix.
+
+    This implementation is generally inspired by
+    https://scikit-learn.org/stable/modules/generated/sklearn.utils.extmath.randomized_svd.html
+    but reimplemented as we wanted to save dependencies and use jit compiled code.
+
+    :param hankel_past: the hankel matrix H1 before the change point
+    :param hankel_future: the hankel matrix H2 after the change point
+    :param x0: the initialization value for the power method applied to H2 to find the dominant eigenvector
+    :param rank: the amount of (approximated) eigenvectors as subspace of H1
+    :param randomized_rank: the rank of the approximation used to construct the noise matrix
+    :param feedback_noise_level: the noise that will be added to the dominant eigenvector after we are finished
+    :return: the change point score, the new dominant eigenvector of H2 for the feedback into the next H2
+    """
+
+    # construct the random matrix for multiplication with the hankell matrix
+    approximation_matrix = np.random.normal(size=(hankel_past.shape[1], randomized_rank))
+
+    # perform power iterations to further "enhance" the top singular of the hankel matrix into Q
+    for _ in range(3):
+        approximation_matrix = hankel_past.T @ hankel_past @ approximation_matrix
+
+    # extract the orthonormal base of the approximation matrix
+    q_substitute, _ = np.linalg.qr(hankel_past @ approximation_matrix, mode='economic')
+
+    # project the hankel matrix onto the lower dimensional orthonormal basis of the approximation matrix
+    base_projection = q_substitute.T @ hankel_past
+
+    # compute the singular vector decomposition of the thinner matrix base projection
+    eigenvecs_past, _, _ = np.linalg.svd(base_projection, full_matrices=False, lapack_driver='gesdd')
+
+    # compute the original eigenvectors
+    eigenvecs_past = np.dot(q_substitute, eigenvecs_past)
+
+    # compute the biggest eigenvector of the hankel matrix after the possible change point (h2)
+    c_2 = hankel_future.T @ hankel_future
+    _, eigvec_future = lg.power_method(c_2, x0, n_iterations=1)
+
+    # add noise to the dominant eigenvector and normalize it again
+    eigvec_future = eigvec_future + feedback_noise_level * np.random.rand(eigvec_future.size)
+    eigvec_future /= np.linalg.norm(eigvec_future)
+
+    # compute the projection distance
+    alpha = eigenvecs_past[:, :rank].T @ eigvec_future
+    return 1-alpha.T @ alpha, eigvec_future
 
 
 if __name__ == '__main__':
