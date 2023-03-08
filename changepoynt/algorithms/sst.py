@@ -2,6 +2,8 @@ import numpy as np
 from numba import jit
 from changepoynt.utils import linalg as lg
 from changepoynt.utils import normalization
+from typing import Callable
+from functools import partial
 
 
 class SingularSpectrumTransformation:
@@ -21,6 +23,13 @@ class SingularSpectrumTransformation:
     Proceedings of the 2007 SIAM International Conference on Data Mining.
     Society for Industrial and Applied Mathematics, 2007.
 
+    It also uses a technique called randomized singular value decomposition which is surveyed and described in
+
+    [3]
+    Halko, Nathan, Per-Gunnar Martinsson, and Joel A. Tropp.
+    "Finding structure with randomness: Probabilistic algorithms for constructing approximate matrix decompositions."
+    SIAM review 53.2 (2011): 217-288.
+
     There will be a parameter specifying, whether to use the implicit krylov approximation from [2]. This
     significantly speeds up the computation but can reduce accuracy as the "eigensignals" are only approximated
     indirectly using a krylov subspace with the possible change point signal as seed. This method also deploys
@@ -36,7 +45,8 @@ class SingularSpectrumTransformation:
     """
 
     def __init__(self, window_length: int, n_windows: int = None, lag: int = None, rank: int = 5, scale: bool = True,
-                 method: str = 'ika', lanczos_rank: int = None, feedback_noise_level: float = 1e-3):
+                 method: str = 'ika', lanczos_rank: int = None, random_rank: int = 10,
+                 feedback_noise_level: float = 1e-3) -> None:
         """
         Initializing the Singular Spectrum Transformation (SST) requires setting a lot of parameters. See the parameters
         explanation for some intuition into the right choices. Currently, there are two SST methods from [1] and [2]
@@ -72,6 +82,10 @@ class SingularSpectrumTransformation:
         determine this value as beeing twice the amount of specified "eigensignals" to span the subspace
         (parameter rank). This is also recommend by the author of IKA-SST in [2].
 
+        :param random_rank: In order to use the randomized singular value decomposition, one needs to provide a
+        randomized rank (size of second matrix dimension for the randomized matrix) as specified in [3]. The lower
+        this value, the faster the computation but the higher the error (as the approxiamtion gets worse).
+
         :param feedback_noise_level: This specifies the amplitude of additive white gaussian noise added to the dominant
         "eigensignal" of the future behavior when shifting forward. This idea is noted in [2] and initializes
         the seed of the power method for dominant eigenvector estimation with the precious dominant eigenvector
@@ -87,14 +101,8 @@ class SingularSpectrumTransformation:
         self.scale = scale
         self.method = method
         self.lanczos_rank = lanczos_rank
+        self.random_rank = random_rank
         self.noise = feedback_noise_level
-
-        # specify the methods and their corresponding functions as lambda functions expecting only the future and
-        # the current hankel matrix, all other parameter should be specified as values in the partial lambda function
-        self.methods = {'ika', 'svd'}
-
-        # check whether the method is correct
-        assert self.method in self.methods, f'Specified method {self.method} is not available in {self.methods}.'
 
         # set some default values when they have not been specified
         if self.n_windows is None:
@@ -104,6 +112,30 @@ class SingularSpectrumTransformation:
         if self.lanczos_rank is None:
             # make rank even and multiply by two just as specified in [2]
             self.lanczos_rank = (self.rank - (self.rank & 1))*2
+        if self.random_rank is None:
+            # compute the rank as specified in [3] and
+            # https://scikit-learn.org/stable/modules/generated/sklearn.utils.extmath.randomized_svd.html
+            self.random_rank = self.rank + 10
+
+        # specify the methods and their corresponding functions as lambda functions expecting only the
+        # 1) future hankel matrix,
+        # 2) the current hankel matrix and
+        # 3) the feedback vector (e.g. for dominant eigenvector feedback)
+        # all other parameter should be specified as values in the partial lambda function
+        self.methods = {'ika': partial(_implicit_krylov_approximation,
+                                       rank=self.rank,
+                                       lanczos_rank=self.lanczos_rank,
+                                       feedback_noise_level=self.noise),
+                        'svd': partial(_singular_value_decomposition,
+                                       rank=self.rank),
+                        'rsvd': partial(_randomized_singular_value_decomposition,
+                                        rank=self.rank,
+                                        randomized_rank=self.lanczos_rank,
+                                        feedback_noise_level=self.noise
+                                        )}
+
+        # check whether the method is correct
+        assert self.method in self.methods, f'Specified method {self.method} is not available in {self.methods}.'
 
     def transform(self, time_series: np.ndarray) -> np.ndarray:
         """
@@ -132,15 +164,17 @@ class SingularSpectrumTransformation:
         else:
             time_series = time_series.copy()
 
+        # get the changepoint scorer from the different methods
+        scoring_function = self.methods[self.method]
+
         # start the scaling itself by calling the jit compiled staticmethod and return the result
         score = _transform(time_series=time_series, start_idx=starting_point, window_length=self.window_length,
-                           n_windows=self.n_windows, lag=self.lag, rank=self.rank, method=self.method,
-                           lanczos_rank=self.lanczos_rank, feedback_noise_level=self.noise)
+                           n_windows=self.n_windows, lag=self.lag, scoring_function=scoring_function)
         return score
 
 
-def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_windows: int, lag: int, rank: int,
-               method: str, lanczos_rank, feedback_noise_level: float = 1e-3):
+def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_windows: int, lag: int,
+               scoring_function: Callable) -> np.ndarray:
     """
     Compute heavy and hopefully jit compilable score computation for the SST method. It does not do any parameter
     checking and can throw cryptic errors. It's only used for internal use as a private function.
@@ -150,18 +184,12 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
     :param window_length: the size of the time series window for each column of the hankel matrix
     :param n_windows: amount of columns in the hankel matrix
     :param lag: sample distance between future and past hankel matrix
-    :param rank: amount of eigenvectors used to span the subspace
-    :param method: scoring method for the change point score
-    :param lanczos_rank: rank of approximation for the implicit eigenvectors
-    :param feedback_noise_level: amplitude of noise added to the feedback dominant eigenvector of future hankel
     """
 
     # create initial vector for ika method with feedback dominant eigenvector as proposed in [2]
     # with a norm of one
-    x0 = np.empty(window_length)
-    if method == 'ika':
-        x0 = np.random.rand(window_length)
-        x0 /= np.linalg.norm(x0)
+    x0 = np.random.rand(window_length)
+    x0 /= np.linalg.norm(x0)
 
     # initialize a scoring array with no values yet
     score = np.zeros_like(time_series)
@@ -175,29 +203,14 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
         # compile the future hankel matrix (H2)
         hankel_future = _compile_hankel(time_series, idx, window_length, n_windows)
 
-        # decide for the method
-        if method == 'ika':
-
-            # compute the scoring with the krylov subspace approximation and also obtain the feedback vector
-            score[idx], x1 = _implicit_krylov_approximation(hankel_past, hankel_future, x0, rank, lanczos_rank)
-
-            # add noise to the initial vector and normalize the vector
-            x0 = x1 + feedback_noise_level * np.random.rand(x0.size)
-            x0 /= np.linalg.norm(x0)
-        elif method == 'svd':
-
-            # compute the outlier score using the svd method
-            score[idx] = _singular_value_decomposition(hankel_past, hankel_future, rank)
-
-        else:
-            # method has not been implemented
-            raise NotImplementedError
+        # compute the score and save the returned feedback vector
+        score[idx], x0 = scoring_function(hankel_past, hankel_future, x0)
 
     return score
 
 
 @jit(nopython=True)
-def _compile_hankel(time_series: np.ndarray, end_index: int, window_size: int, rank: int):
+def _compile_hankel(time_series: np.ndarray, end_index: int, window_size: int, rank: int) -> np.ndarray:
     """
     This function constructs a hankel matrix from a 1D time series. Please make sure constructing the matrix with
     the given parameters (end index, window size, etc.) is possible, as this function does no checks due to
@@ -223,7 +236,7 @@ def _compile_hankel(time_series: np.ndarray, end_index: int, window_size: int, r
 
 
 def _implicit_krylov_approximation(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
-                                   rank: int, lanczos_rank: int):
+                                   rank: int, lanczos_rank: int, feedback_noise_level: float) -> (float, np.ndarray):
     """
     This function computes the change point score based on the krylov subspace approximation of the SST as proposed in
 
@@ -258,10 +271,16 @@ def _implicit_krylov_approximation(hankel_past: np.ndarray, hankel_future: np.nd
 
     # compute the similarity score as defined in the ika sst paper and also return our u for the
     # feedback loop in figure 3 of the paper
+
+    # add noise to the initial vector and normalize the vector
+    x0 = x0 + feedback_noise_level * np.random.rand(x0.size)
+    x0 /= np.linalg.norm(x0)
+
     return 1 - (eigvecs[0, :] * eigvecs[0, :]).sum(), u
 
 
-def _singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, rank: int):
+def _singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
+                                  rank: int) -> (float, np.ndarray):
     """
     This function implements change point detection using singular value decomposition as proposed in:
 
@@ -272,6 +291,8 @@ def _singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.nda
 
     :param hankel_past: the hankel matrix H1 before the change point
     :param hankel_future: the hankel matrix H2 after the change point
+    :param x0: highest eigenvector of previous iteration (will be ignored in this function and is just added to complete
+    the function signature, i.e. input and output size, to be compatible with other methods)
     :param rank: the amount of (approximated) eigenvectors as subspace of H1
     :return: the change point score
     """
@@ -286,7 +307,12 @@ def _singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.nda
 
     # compute the projection distance
     alpha = eigvecs_past.T @ eigvec_future
-    return 1 - alpha.T @ alpha
+    return 1 - alpha.T @ alpha, x0
+
+
+def _randomized_singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
+                                             rank: int, randomized_rank: int, feedback_noise_level: float):
+    pass
 
 
 if __name__ == '__main__':
