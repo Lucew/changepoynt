@@ -197,7 +197,7 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
 
 
 @jit(nopython=True)
-def _compile_hankel(time_series, end_index, window_size, rank):
+def _compile_hankel(time_series: np.ndarray, end_index: int, window_size: int, rank: int):
     """
     This function constructs a hankel matrix from a 1D time series. Please make sure constructing the matrix with
     the given parameters (end index, window size, etc.) is possible, as this function does no checks due to
@@ -222,7 +222,8 @@ def _compile_hankel(time_series, end_index, window_size, rank):
     return hankel
 
 
-def _implicit_krylov_approximation(hankel_past, hankel_future, x0, rank, lanczos_rank):
+def _implicit_krylov_approximation(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
+                                   rank: int, lanczos_rank: int):
     """
     This function computes the change point score based on the krylov subspace approximation of the SST as proposed in
 
@@ -260,7 +261,7 @@ def _implicit_krylov_approximation(hankel_past, hankel_future, x0, rank, lanczos
     return 1 - (eigvecs[0, :] * eigvecs[0, :]).sum(), u
 
 
-def _singular_value_decomposition(hankel_past, hankel_future, rank):
+def _singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, rank: int):
     """
     This function implements change point detection using singular value decomposition as proposed in:
 
