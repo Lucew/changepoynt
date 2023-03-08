@@ -100,7 +100,7 @@ class SingularSpectrumTransformation:
         if self.n_windows is None:
             self.n_windows = self.window_length
         if self.lag is None:
-            self.lag = min(self.window_length//2, 1)
+            self.lag = max(self.n_windows//2, 1)
         if self.lanczos_rank is None:
             # make rank even and multiply by two just as specified in [2]
             self.lanczos_rank = (self.rank - (self.rank & 1))*2
@@ -242,7 +242,8 @@ def _implicit_krylov_approximation(hankel_past, hankel_future, x0, rank, lanczos
     """
 
     # compute the biggest eigenvector of the hankel matrix after the possible change point (h2)
-    _, u = lg.power_method(hankel_future, x0, n_iterations=10)
+    c_2 = hankel_future.T @ hankel_future
+    _, u = lg.power_method(c_2, x0, n_iterations=1)
 
     # compute the empirical covariance matrix before the possible change point (H1)
     c_1 = hankel_past.T @ hankel_past
@@ -275,15 +276,15 @@ def _singular_value_decomposition(hankel_past, hankel_future, rank):
     """
 
     # compute the rank highest eigenvectors of the past hankel matrix
-    eigvecs_past, _ = lg.highest_k_eigenvectors(hankel_past, rank)
+    _, eigvecs_past = lg.highest_k_eigenvectors(hankel_past, rank)
 
     # compute the dominant eigenvector of the future time series
     x0 = np.random.rand(hankel_future.shape[1])
     x0 /= np.linalg.norm(x0)
     _, eigvec_future = lg.power_method(hankel_future, x0, n_iterations=20)
 
-    # compute the normalized projections
-    alpha = eigvec_future - eigvecs_past @ eigvecs_past.T @ eigvec_future
+    # compute the projection distance
+    alpha = eigvecs_past.T @ eigvec_future
     return 1 - alpha.T @ alpha
 
 
@@ -291,9 +292,10 @@ if __name__ == '__main__':
 
     # make synthetic step function
     np.random.seed(123)
-    x = np.hstack([1 * np.ones(1000) + np.random.rand(1000) * 1,
-                   3 * np.ones(1000) + np.random.rand(1000) * 2,
-                   5 * np.ones(1000) + np.random.rand(1000) * 1.5])
+    length = 300
+    x = np.hstack([1 * np.ones(length) + np.random.rand(length) * 1,
+                   3 * np.ones(length) + np.random.rand(length) * 2,
+                   5 * np.ones(length) + np.random.rand(length) * 1.5])
     x += np.random.rand(x.size)
 
     # create the sst method
