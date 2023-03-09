@@ -18,7 +18,7 @@ def main():
         version="0.0.1",
         author="Lucas Weber",
         author_email="weber-lucas@web.de",
-        url="",
+        url="https://github.com/Lucew/changepoynt",
         description="Readable package for several change point detection methods implemented in python.",
         long_description="This package contains several readable change point detections methods in python.",
         zip_safe=False,
