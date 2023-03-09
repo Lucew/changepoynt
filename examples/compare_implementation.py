@@ -3,7 +3,6 @@ np.random.seed(123)
 import matplotlib.pyplot as plt
 import seaborn as sns
 from changepoynt.algorithms.sst import SingularSpectrumTransformation
-import fastsst
 import time
 import pandas as pd
 
@@ -11,8 +10,9 @@ import pandas as pd
 # some plotting utilities
 def plot_data_and_score(raw_data, own_score, other_score, normalize=True):
     # normalize the scores
-    own_score = own_score / np.max(own_score)
-    other_score = other_score / np.max(other_score)
+    if normalize:
+        own_score = own_score / np.max(own_score)
+        other_score = other_score / np.max(other_score)
 
     # plot the stuff
     f, ax = plt.subplots(2, 1, figsize=(20, 10))
@@ -50,13 +50,12 @@ def generate_functions(idx):
 
 def qualitative_comparison():
     # get a function
-    x = generate_functions(3)
+    x = generate_functions(2)
 
     # compute change score using sst
-    own_score = SingularSpectrumTransformation(window_length=60, lag=10, rank=5, method='svd').transform(x)
+    own_score = SingularSpectrumTransformation(window_length=60, lag=20, rank=5, method='ika').transform(x)
     # compute change score using other implementation
-    # other_score = fastsst.SingularSpectrumTransformation(win_length=60, lag=10, n_components=5).score_offline(x)
-    other_score = SingularSpectrumTransformation(window_length=60, lag=10, rank=5, method='rsvd').transform(x)
+    other_score = SingularSpectrumTransformation(window_length=60, lag=20, rank=5, method='fbrsvd').transform(x)
     plot_data_and_score(x, own_score, other_score)
     plt.show()
 
@@ -64,7 +63,8 @@ def qualitative_comparison():
 def speed_comparison():
 
     # measure the two methods for different timings
-    window_candidates = np.logspace(1, 3, 5).astype(int)
+    # window_candidates = np.logspace(1, 3, 5).astype(int)
+    window_candidates = [10, 30, 100, 300, 500, 1000]
 
     # generate a function
     x = generate_functions(2)
@@ -73,6 +73,7 @@ def speed_comparison():
     SingularSpectrumTransformation(10, method='ika').transform(x)
     SingularSpectrumTransformation(10, method='svd').transform(x)
     SingularSpectrumTransformation(10, method='rsvd').transform(x)
+    SingularSpectrumTransformation(10, method='fbrsvd').transform(x)
 
     def time_per_window_length(window_length, method):
         # create the SST object
@@ -87,9 +88,9 @@ def speed_comparison():
     measured_times = []
     window_lengths = []
 
-    for method in ("ika", "rsvd"):
+    for method in ("ika", "rsvd", "fbrsvd"):
         for wl in window_candidates:
-            print(wl, window_candidates)
+            print(method, wl, window_candidates)
             for j in range(10):
                 measured_times.append(time_per_window_length(wl, method=method))
                 methods.append(method)
@@ -101,5 +102,5 @@ def speed_comparison():
 
 
 if __name__ == '__main__':
-    # qualitative_comparison()
-    speed_comparison()
+    qualitative_comparison()
+    # speed_comparison()
