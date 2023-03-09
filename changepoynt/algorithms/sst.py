@@ -125,8 +125,8 @@ class SingularSpectrumTransformation:
         self.methods = {'ika': partial(_implicit_krylov_approximation,
                                        rank=self.rank,
                                        lanczos_rank=self.lanczos_rank),
-                        'svd': partial(_singular_value_decomposition,
-                                       rank=self.rank),
+                        'svd': partial(_rayleigh_singular_value_decomposition,
+                                         rank=self.rank),
                         'rsvd': partial(_randomized_singular_value_decomposition,
                                         rank=self.rank,
                                         randomized_rank=self.lanczos_rank),
@@ -136,7 +136,7 @@ class SingularSpectrumTransformation:
                         }
 
         # check whether the method is correct
-        assert self.method in self.methods, f'Specified method {self.method} is not available in {self.methods}.'
+        assert self.method in self.methods, f'Specified method {self.method} is not available in {self.methods.keys()}.'
 
     def transform(self, time_series: np.ndarray) -> np.ndarray:
         """
@@ -257,7 +257,6 @@ def _implicit_krylov_approximation(hankel_past: np.ndarray, hankel_future: np.nd
     :param x0: the initialization value for the power method applied to H2 to find the dominant eigenvector
     :param rank: the amount of (approximated) eigenvectors as subspace of H1
     :param lanczos_rank: the rank of the approximation of the "eigensignals"
-    :param feedback_noise_level: the noise that will be added to the dominant eigenvector after we are finished
     :return: the change point score, the new dominant eigenvector of H2 for the feedback into the next H2
     """
 
@@ -310,8 +309,8 @@ def _rayleigh_singular_value_decomposition(hankel_past: np.ndarray, hankel_futur
     return 1 - alpha.T @ alpha, x0
 
 
-def _lancczos_singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
-                                           rank: int) -> (float, np.ndarray):
+def _lanczos_singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
+                                          rank: int, lanczos_rank: int) -> (float, np.ndarray):
     """
     This function implements change point detection using restarted implicit lanczos singular value decomposition
     and computes the change point score as proposed in:
@@ -321,16 +320,20 @@ def _lancczos_singular_value_decomposition(hankel_past: np.ndarray, hankel_futur
     Proceedings of the 2005 SIAM international conference on data mining.
     Society for Industrial and Applied Mathematics, 2005.
 
+    !NOTE!
+    Does currently not converge and therefore is not in use.
+
     :param hankel_past: the hankel matrix H1 before the change point
     :param hankel_future: the hankel matrix H2 after the change point
     :param x0: highest eigenvector of previous iteration (will be ignored in this function and is just added to complete
     the function signature, i.e. input and output size, to be compatible with other methods)
     :param rank: the amount of (approximated) eigenvectors as subspace of H1
+    :param lanczos_rank: the rank of the approximation of the "eigensignals"
     :return: the change point score, the input vector x0
     """
 
     # compute the rank highest eigenvectors of the past hankel matrix
-    _, eigvecs_past = lg.lanczos(hankel_past, rank)
+    _, eigvecs_past = lg.implicit_restarted_lanczos_bidiagonalization(hankel_past, rank, lanczos_rank=lanczos_rank)
 
     # compute the dominant eigenvector of the future time series
     c_2 = hankel_future.T @ hankel_future
