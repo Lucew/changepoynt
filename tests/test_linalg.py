@@ -22,14 +22,16 @@ class TestLinearAlgebra:
         self.e = -1 * np.random.rand(99)
         self.T = np.diag(self.d) + np.diag(self.e, k=1) + np.diag(self.e, k=-1)
 
+        # compute the svd of the matrix A as we will need it for comparisons
+        self.eigvecs, self.eigvals, _ = np.linalg.svd(self.A)
+
     def teardown_method(self):
         pass
 
     def test_power_method(self):
         eigval, eigvec = lg.power_method(self.A, self.x0, n_iterations=100)
-        eigvecs, eigvals, _ = np.linalg.svd(self.A)
-        np.testing.assert_almost_equal(eigval, eigvals[0])
-        np.testing.assert_almost_equal(np.abs(eigvec), np.abs(eigvecs[:, 0]))
+        np.testing.assert_almost_equal(eigval, self.eigvals[0])
+        np.testing.assert_almost_equal(np.abs(eigvec), np.abs(self.eigvecs[:, 0]))
 
     def test_eig_tridiag(self):
         # take a look at the highest half of the eigenvalues as lower one might be unstable
@@ -43,7 +45,6 @@ class TestLinearAlgebra:
     def test_k_highest_eigenvectors(self):
         k = 20
         k_eigvals, k_eigvecs = lg.highest_k_eigenvectors(self.A, k)
-        eigvecs, eigvals, _ = np.linalg.svd(self.A)
 
         # order is not guaranteed by the method, so we need to sort in decreasing order
         idx = np.argsort(k_eigvals)[::-1]
@@ -51,17 +52,18 @@ class TestLinearAlgebra:
         k_eigvecs = k_eigvecs[:, idx]
 
         # compare the values
-        np.testing.assert_almost_equal(k_eigvals, eigvals[:k])
-        np.testing.assert_almost_equal(np.abs(k_eigvecs), np.abs(eigvecs[:, :k]))
+        np.testing.assert_almost_equal(k_eigvals, self.eigvals[:k])
+        np.testing.assert_almost_equal(np.abs(k_eigvecs), np.abs(self.eigvecs[:, :k]))
 
     def test_randomized_svd(self):
+
+        # set a threshold for the amount of eigenvectors we want to have and compute them
         k = 5
         k_eigvals, k_eigvecs = lg.randomized_singular_value_decomposition(self.A, 50)
-        eigvecs, eigvals, _ = np.linalg.svd(self.A)
 
         # compare the values
-        np.testing.assert_almost_equal(k_eigvals[:k], eigvals[:k])
-        np.testing.assert_almost_equal(np.abs(k_eigvecs[:, :k]), np.abs(eigvecs[:, :k]))
+        np.testing.assert_almost_equal(k_eigvals[:k], self.eigvals[:k])
+        np.testing.assert_almost_equal(np.abs(k_eigvecs[:, :k]), np.abs(self.eigvecs[:, :k]))
 
 
 if __name__ == "__main__":
