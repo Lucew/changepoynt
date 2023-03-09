@@ -4,6 +4,7 @@ import numpy as np
 from numba import jit
 from scipy.linalg import eigh_tridiagonal
 from scipy.sparse.linalg import svds
+import fbpca
 
 
 @jit(nopython=True)
@@ -182,6 +183,11 @@ def randomized_singular_value_decomposition(a_matrix: np.ndarray, randomized_ran
     # compute the original eigenvectors
     eigenvectors = np.dot(q_substitute, eigenvectors)
 
+    return eigenvalues, eigenvectors
+
+
+def facebook_randomized_svd(a_matrix: np.ndarray, randomized_rank: int) -> (np.ndarray, np.ndarray):
+    eigenvectors, eigenvalues, _ = fbpca.pca(a_matrix, randomized_rank, True)
     return eigenvalues, eigenvectors
 
 

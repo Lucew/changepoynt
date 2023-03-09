@@ -129,8 +129,11 @@ class SingularSpectrumTransformation:
                                        rank=self.rank),
                         'rsvd': partial(_randomized_singular_value_decomposition,
                                         rank=self.rank,
-                                        randomized_rank=self.lanczos_rank
-                                        )}
+                                        randomized_rank=self.lanczos_rank),
+                        'fbrsvd': partial(_facebook_random_singular_value_decomposition,
+                                          rank=self.rank,
+                                          randomized_rank=self.lanczos_rank)
+                        }
 
         # check whether the method is correct
         assert self.method in self.methods, f'Specified method {self.method} is not available in {self.methods}.'
@@ -348,6 +351,43 @@ def _randomized_singular_value_decomposition(hankel_past: np.ndarray, hankel_fut
     return 1-alpha.T @ alpha, eigvec_future
 
 
+def _facebook_random_singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
+                                                  rank: int, randomized_rank: int):
+    """
+    This function implements the idea of
+
+    Idé, Tsuyoshi, and Keisuke Inoue.
+    "Knowledge discovery from heterogeneous dynamic systems using change-point correlations."
+    Proceedings of the 2005 SIAM international conference on data mining.
+    Society for Industrial and Applied Mathematics, 2005.
+
+    but uses the randomized svd decomposition by
+
+    Szlam, Arthur, Yuval Kluger, and Mark Tygert.
+    "An implementation of a randomized algorithm for principal component analysis."
+    arXiv preprint arXiv:1412.3510 (2014).
+
+    :param hankel_past: the hankel matrix H1 before the change point
+    :param hankel_future: the hankel matrix H2 after the change point
+    :param x0: the initialization value for the power method applied to H2 to find the dominant eigenvector
+    :param rank: the amount of (approximated) eigenvectors as subspace of H1
+    :param randomized_rank: the rank of the approximation used to construct the noise matrix
+    :return: the change point score, the new dominant eigenvector of H2 for the feedback into the next H2
+    """
+
+    # compute the biggest eigenvector of the hankel matrix after the possible change point (h2)
+    c_2 = hankel_future.T @ hankel_future
+    _, eigvec_future = lg.power_method(c_2, x0, n_iterations=1)
+
+    # compute the eigenvectors of the past hankel matrix
+    c_1 = hankel_past.T @ hankel_past
+    _, eigenvecs_past = lg.facebook_randomized_svd(c_1, randomized_rank=randomized_rank)
+
+    # compute the change point score as defined in the papers
+    alpha = eigenvecs_past[:, :rank].T @ eigvec_future
+    return 1-alpha.T @ alpha, eigvec_future
+
+
 if __name__ == '__main__':
 
     # make synthetic step function
@@ -361,7 +401,11 @@ if __name__ == '__main__':
     # create the sst method
     ika_sst = SingularSpectrumTransformation(31, method='ika')
     svd_sst = SingularSpectrumTransformation(31, method='svd')
+    rsvd_sst = SingularSpectrumTransformation(31, method='rsvd')
+    fbrsvd_sst = SingularSpectrumTransformation(31, method='fbrsvd')
 
     # make the scoring
     ika_sst.transform(x)
     svd_sst.transform(x)
+    rsvd_sst.transform(x)
+    fbrsvd_sst.transform(x)
