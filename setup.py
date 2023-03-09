@@ -4,10 +4,9 @@ from os import path
 
 
 # read the contents of requirements.txt
-this_directory = path.abspath(path.dirname(__file__))
-with open(path.join(this_directory, 'requirements.txt'), encoding='utf-8') as f:
+with open('requirements.txt', encoding='utf-8') as f:
     requirements = f.read().splitlines()
-with open(path.join(this_directory, 'requirements_tests.txt'), encoding='utf-8') as f:
+with open('requirements_tests.txt', encoding='utf-8') as f:
     requirements_tests = f.read().splitlines()
 
 
