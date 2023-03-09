@@ -35,7 +35,8 @@ def main():
             "Programming Language :: Python :: 3.9",
             "License :: OSI Approved :: BSD License",
             "Topic :: Scientific/Engineering",
-        ]
+        ],
+        keywords='changepoint timeseries engineering'
     )
 
 
