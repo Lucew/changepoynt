@@ -279,10 +279,11 @@ def _implicit_krylov_approximation(hankel_past: np.ndarray, hankel_future: np.nd
     return 1 - (eigvecs[0, :] * eigvecs[0, :]).sum(), eigvec_future
 
 
-def _singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
-                                  rank: int) -> (float, np.ndarray):
+def _rayleigh_singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
+                                           rank: int) -> (float, np.ndarray):
     """
-    This function implements change point detection using singular value decomposition as proposed in:
+    This function implements change point detection using rayleigh-ritz singular value decomposition
+    and computes the change point score as proposed in:
 
     Idé, Tsuyoshi, and Keisuke Inoue.
     "Knowledge discovery from heterogeneous dynamic systems using change-point correlations."
@@ -298,13 +299,42 @@ def _singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.nda
     """
 
     # compute the rank highest eigenvectors of the past hankel matrix
-    _, eigvecs_past = lg.highest_k_eigenvectors(hankel_past, rank)
+    _, eigvecs_past = lg.rayleigh_ritz_singular_value_decomposition(hankel_past, rank)
 
     # compute the dominant eigenvector of the future time series
-    x0 = np.random.rand(hankel_future.shape[1])
-    x0 /= np.linalg.norm(x0)
     c_2 = hankel_future.T @ hankel_future
-    _, eigvec_future = lg.power_method(c_2, x0, n_iterations=20)
+    _, eigvec_future = lg.power_method(c_2, x0, n_iterations=1)
+
+    # compute the projection distance
+    alpha = eigvecs_past.T @ eigvec_future
+    return 1 - alpha.T @ alpha, x0
+
+
+def _lancczos_singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
+                                           rank: int) -> (float, np.ndarray):
+    """
+    This function implements change point detection using restarted implicit lanczos singular value decomposition
+    and computes the change point score as proposed in:
+
+    Idé, Tsuyoshi, and Keisuke Inoue.
+    "Knowledge discovery from heterogeneous dynamic systems using change-point correlations."
+    Proceedings of the 2005 SIAM international conference on data mining.
+    Society for Industrial and Applied Mathematics, 2005.
+
+    :param hankel_past: the hankel matrix H1 before the change point
+    :param hankel_future: the hankel matrix H2 after the change point
+    :param x0: highest eigenvector of previous iteration (will be ignored in this function and is just added to complete
+    the function signature, i.e. input and output size, to be compatible with other methods)
+    :param rank: the amount of (approximated) eigenvectors as subspace of H1
+    :return: the change point score, the input vector x0
+    """
+
+    # compute the rank highest eigenvectors of the past hankel matrix
+    _, eigvecs_past = lg.lanczos(hankel_past, rank)
+
+    # compute the dominant eigenvector of the future time series
+    c_2 = hankel_future.T @ hankel_future
+    _, eigvec_future = lg.power_method(c_2, x0, n_iterations=1)
 
     # compute the projection distance
     alpha = eigvecs_past.T @ eigvec_future
