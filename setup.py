@@ -4,9 +4,10 @@ from os import path
 
 
 # read the contents of requirements.txt
-with open('requirements.txt', encoding='utf-8') as f:
+this_directory = path.abspath(path.dirname(__file__))
+with open(path.join(this_directory, 'requirements.txt'), encoding='utf-8') as f:
     requirements = f.read().splitlines()
-with open('requirements_tests.txt', encoding='utf-8') as f:
+with open(path.join(this_directory, 'requirements_tests.txt'), encoding='utf-8') as f:
     requirements_tests = f.read().splitlines()
 
 
@@ -26,6 +27,7 @@ def main():
         install_requires=requirements,
         dependency_links=[],
         tests_require=requirements_tests,
+        extras_require={'test': requirements_tests},
         setup_requires=[],
         license="BSD License",
         test_suite="tests",
