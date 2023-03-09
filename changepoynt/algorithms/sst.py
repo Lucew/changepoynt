@@ -108,7 +108,8 @@ class SingularSpectrumTransformation:
         if self.n_windows is None:
             self.n_windows = self.window_length
         if self.lag is None:
-            self.lag = max(self.n_windows//2, 1)
+            # rule of thumb
+            self.lag = max(self.n_windows//3, 1)
         if self.lanczos_rank is None:
             # make rank even and multiply by two just as specified in [2]
             self.lanczos_rank = self.rank * 2 - (self.rank & 1)
@@ -407,7 +408,6 @@ def _facebook_random_singular_value_decomposition(hankel_past: np.ndarray, hanke
     :param randomized_rank: the rank of the approximation used to construct the noise matrix
     :return: the change point score, the new dominant eigenvector of H2 for the feedback into the next H2
     """
-
     # compute the biggest eigenvector of the hankel matrix after the possible change point (h2)
     c_2 = hankel_future.T @ hankel_future
     _, eigvec_future = lg.power_method(c_2, x0, n_iterations=1)
