@@ -3,8 +3,9 @@
 import numpy as np
 from numba import jit
 from scipy.linalg import eigh_tridiagonal
-from scipy.sparse.linalg import svds
+from scipy.sparse.linalg import svds, eigsh
 import fbpca
+import warnings
 
 
 @jit(nopython=True)
@@ -102,7 +103,8 @@ def tridiagonal_eigenvalues(alphas: np.ndarray, betas: np.ndarray, amount=-1):
     """
 
     # check whether we need to use default parameters
-    if amount < 0: amount = alphas.shape[0]
+    if amount < 0:
+        amount = alphas.shape[0]
 
     # assertions about shape and dimensions as well as amount of eigenvectors
     assert 0 < amount <= alphas.shape[0], 'We can only calculate one to size of matrix eigenvalues.'
@@ -118,7 +120,7 @@ def tridiagonal_eigenvalues(alphas: np.ndarray, betas: np.ndarray, amount=-1):
     return eigenvalues[::-1], eigenvectors[:, ::-1]
 
 
-def highest_k_eigenvectors(a_matrix: np.ndarray, k: int) -> (np.ndarray, np.ndarray):
+def rayleigh_ritz_singular_value_decomposition(a_matrix: np.ndarray, k: int) -> (np.ndarray, np.ndarray):
     """
     This function uses the Rayleigh-Ritz method implemented in ARPACK to compute the k highest eigenvalues and
     corresponding eigenvectors. It should be faster as a complete svd.
@@ -191,7 +193,30 @@ def facebook_randomized_svd(a_matrix: np.ndarray, randomized_rank: int) -> (np.n
     return eigenvalues, eigenvectors
 
 
-if __name__ == '__main__':
+def implicit_restarted_lanczos_bidiagonalization(a_matrix: np.ndarray, rank: int,
+                                                 lanczos_rank: int) -> (np.ndarray, np.ndarray):
+    """
+    This function uses the implicitly Restarted Lanczos method implemented in ARPACK to compute the k highest
+    eigenvalues and corresponding eigenvectors. It should be faster as a complete svd.
+
+    !NOTE!
+    This method only works for symmetric (hermitian) matrices!!
+
+    :param a_matrix: 2D-Matrix filled with floats for which we want to find the left eigenvectors
+    :param rank: the amount of highest eigenvectors we want to find
+    :param lanczos_rank: the size of the lanczos subspace approximation
+    :return: returns the eigenvalues and eigenvectors as numpy arrays
+    """
+    eigenvalues, eigenvectors = eigsh(a_matrix, k=rank, which='LM', ncv=lanczos_rank)
+    return eigenvalues, eigenvectors
+
+
+def examples():
+    """
+    This function implements some usage examples for quick internal testing. It is not aimed for beeing used.
+    :return: None
+    """
+
     import time
 
     # set a random seed
@@ -210,16 +235,25 @@ if __name__ == '__main__':
     # test the tridiagonalization method
     size = 1000
     d = 3 * np.random.rand(size)
-    e = -1 * np.random.rand(size-1)
+    e = -1 * np.random.rand(size - 1)
     start = time.time()
-    tri_eigvals, tri_eigvecs = tridiagonal_eigenvalues(d, e, size//2)
-    print(f'Specialized tridiagonal SVD took: {time.time()-start} s.')
+    tri_eigvals, tri_eigvecs = tridiagonal_eigenvalues(d, e, size // 2)
+    print(f'Specialized tridiagonal SVD took: {time.time() - start} s.')
     T = np.diag(d) + np.diag(e, k=1) + np.diag(e, k=-1)
     start = time.time()
-    eigvecs, eigvals, _ = np.linalg.svd(T)
+    eigvecs, eigvals , _ = np.linalg.svd(T)
     print(f'Normal SVD took: {time.time() - start} s.')
 
     # test randomized svd
     eigval, eigvec = randomized_singular_value_decomposition(A, 20)
     eigvecs, eigvals, _ = np.linalg.svd(A)
     print(eigval, eigvals[0])
+
+    # test irlbd
+    eigval, eigvec, = implicit_restarted_lanczos_bidiagonalization(A, 20)
+    eigvecs, eigvals, _ = np.linalg.svd(A)
+    print(eigval, eigvals[0])
+
+
+if __name__ == '__main__':
+    examples()
