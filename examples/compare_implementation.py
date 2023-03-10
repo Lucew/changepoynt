@@ -23,6 +23,11 @@ def plot_data_and_score(raw_data, own_score, other_score, normalize=True):
     ax[1].set_title("Change score comparison")
     ax[1].legend()
 
+    # plot the background
+    x_grid, y_grid = np.meshgrid(np.arange(len(own_score)), np.linspace(*ax[0].get_ylim()))
+    z_grid = (own_score/np.max(own_score))[x_grid]
+    ax[0].contourf(x_grid, y_grid, z_grid, alpha=0.5, cmap="Blues")
+
 
 def generate_functions(idx):
     if idx == 1:
