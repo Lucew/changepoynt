@@ -123,7 +123,7 @@ def tridiagonal_eigenvalues(alphas: np.ndarray, betas: np.ndarray, amount=-1):
 def rayleigh_ritz_singular_value_decomposition(a_matrix: np.ndarray, k: int) -> (np.ndarray, np.ndarray):
     """
     This function uses the Rayleigh-Ritz method implemented in ARPACK to compute the k highest eigenvalues and
-    corresponding eigenvectors. It should be faster as a complete svd.
+    corresponding eigenvectors. It should be faster than a complete svd.
 
     !NOTE!:
     The order of the k highest eigenvalues is not guaranteed by this method!
