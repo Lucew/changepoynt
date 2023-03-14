@@ -84,7 +84,7 @@ class SingularSpectrumTransformation:
 
         :param random_rank: In order to use the randomized singular value decomposition, one needs to provide a
         randomized rank (size of second matrix dimension for the randomized matrix) as specified in [3]. The lower
-        this value, the faster the computation but the higher the error (as the approxiamtion gets worse).
+        this value, the faster the computation but the higher the error (as the approximation gets worse).
 
         :param feedback_noise_level: This specifies the amplitude of additive white gaussian noise added to the dominant
         "eigensignal" of the future behavior when shifting forward. This idea is noted in [2] and initializes
@@ -127,13 +127,13 @@ class SingularSpectrumTransformation:
                                        rank=self.rank,
                                        lanczos_rank=self.lanczos_rank),
                         'svd': partial(_rayleigh_singular_value_decomposition,
-                                         rank=self.rank),
+                                       rank=self.rank),
                         'rsvd': partial(_randomized_singular_value_decomposition,
                                         rank=self.rank,
-                                        randomized_rank=self.lanczos_rank),
+                                        randomized_rank=self.random_rank),
                         'fbrsvd': partial(_facebook_random_singular_value_decomposition,
                                           rank=self.rank,
-                                          randomized_rank=self.lanczos_rank)
+                                          randomized_rank=self.random_rank)
                         }
 
         # check whether the method is correct
