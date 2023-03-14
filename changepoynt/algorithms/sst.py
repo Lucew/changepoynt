@@ -45,7 +45,7 @@ class SingularSpectrumTransformation:
     """
 
     def __init__(self, window_length: int, n_windows: int = None, lag: int = None, rank: int = 5, scale: bool = True,
-                 method: str = 'ika', lanczos_rank: int = None, random_rank: int = 10,
+                 method: str = 'ika', lanczos_rank: int = None, random_rank: int = None,
                  feedback_noise_level: float = 1e-3) -> None:
         """
         Initializing the Singular Spectrum Transformation (SST) requires setting a lot of parameters. See the parameters
