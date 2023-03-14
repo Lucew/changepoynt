@@ -116,7 +116,7 @@ class SingularSpectrumTransformation:
         if self.random_rank is None:
             # compute the rank as specified in [3] and
             # https://scikit-learn.org/stable/modules/generated/sklearn.utils.extmath.randomized_svd.html
-            self.random_rank = self.rank + 10
+            self.random_rank = min(self.rank + 10, self.window_length, self.n_windows)
 
         # specify the methods and their corresponding functions as lambda functions expecting only the
         # 1) future hankel matrix,

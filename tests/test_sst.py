@@ -36,6 +36,9 @@ class TestSST:
             ssts.SingularSpectrumTransformation(min(5, self.signal_length//2), rank=2,
                                                 method=method).transform(self.signal)
 
+    def test_default(self):
+        ssts.SingularSpectrumTransformation(min(5, self.signal_length//2), rank=2).transform(self.signal)
+
     def test_unknown_method(self):
         with pytest.raises(AssertionError):
             ssts.SingularSpectrumTransformation(10, method='asdafwegrhqh')
