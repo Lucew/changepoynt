@@ -200,10 +200,10 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
     for idx in range(start_idx, time_series.shape[0]):
 
         # compile the past hankel matrix (H1)
-        hankel_past = _compile_hankel(time_series, idx-lag, window_length, n_windows)
+        hankel_past = lg.compile_hankel(time_series, idx-lag, window_length, n_windows)
 
         # compile the future hankel matrix (H2)
-        hankel_future = _compile_hankel(time_series, idx, window_length, n_windows)
+        hankel_future = lg.compile_hankel(time_series, idx, window_length, n_windows)
 
         # compute the score and save the returned feedback vector
         score[idx], x1 = scoring_function(hankel_past, hankel_future, x0)
@@ -213,32 +213,6 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
         x0 /= np.linalg.norm(x0)
 
     return score
-
-
-@jit(nopython=True)
-def _compile_hankel(time_series: np.ndarray, end_index: int, window_size: int, rank: int) -> np.ndarray:
-    """
-    This function constructs a hankel matrix from a 1D time series. Please make sure constructing the matrix with
-    the given parameters (end index, window size, etc.) is possible, as this function does no checks due to
-    performance reasons.
-
-    :param time_series: 1D array with float values as the time series
-    :param end_index: the index (point in time) where the time series starts
-    :param window_size: the size of the windows cut from the time series
-    :param rank: the amount of time series in the matrix
-    :return: The hankel matrix with lag one
-    """
-
-    # make an empty matrix to place the values
-    #
-    # almost no faster way:
-    # https://stackoverflow.com/questions/71410927/vectorized-way-to-construct-a-block-hankel-matrix-in-numpy-or-scipy
-    hankel = np.empty((window_size, rank))
-
-    # go through the time series and make the hankel matrix
-    for cx in range(rank):
-        hankel[:, cx] = time_series[(end_index-window_size-cx):(end_index-cx)]
-    return hankel
 
 
 def _implicit_krylov_approximation(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,

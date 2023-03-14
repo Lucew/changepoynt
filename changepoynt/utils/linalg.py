@@ -255,5 +255,31 @@ def examples():
     print(eigval, eigvals[0])
 
 
+@jit(nopython=True)
+def compile_hankel(time_series: np.ndarray, end_index: int, window_size: int, rank: int) -> np.ndarray:
+    """
+    This function constructs a hankel matrix from a 1D time series. Please make sure constructing the matrix with
+    the given parameters (end index, window size, etc.) is possible, as this function does no checks due to
+    performance reasons.
+
+    :param time_series: 1D array with float values as the time series
+    :param end_index: the index (point in time) where the time series starts
+    :param window_size: the size of the windows cut from the time series
+    :param rank: the amount of time series in the matrix
+    :return: The hankel matrix with lag one
+    """
+
+    # make an empty matrix to place the values
+    #
+    # almost no faster way:
+    # https://stackoverflow.com/questions/71410927/vectorized-way-to-construct-a-block-hankel-matrix-in-numpy-or-scipy
+    hankel = np.empty((window_size, rank))
+
+    # go through the time series and make the hankel matrix
+    for cx in range(rank):
+        hankel[:, cx] = time_series[(end_index-window_size-cx):(end_index-cx)]
+    return hankel
+
+
 if __name__ == '__main__':
     examples()
