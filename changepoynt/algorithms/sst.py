@@ -396,7 +396,7 @@ def _facebook_random_singular_value_decomposition(hankel_past: np.ndarray, hanke
 
 
 if __name__ == '__main__':
-
+    from time import time
     # make synthetic step function
     np.random.seed(123)
     length = 300
@@ -412,7 +412,9 @@ if __name__ == '__main__':
     fbrsvd_sst = SingularSpectrumTransformation(31, method='fbrsvd')
 
     # make the scoring
+    start = time()
     ika_sst.transform(x)
+    print((time() - start) / (length * 3))
     svd_sst.transform(x)
     rsvd_sst.transform(x)
     fbrsvd_sst.transform(x)
