@@ -52,9 +52,9 @@ class RuLSIF(Algorithm):
         # check that alpha does not exceed the bounds
         assert 0 <= self.alpha < 1, 'The alpha parameter should be in the interval [0,1).'
 
-        # set some rule of thumb parameters
-        if not self.estimation_lag:
-            self.estimation_lag = window_length*2
+        # check for the estimation lag
+        assert self.estimation_lag is None or 5 <= self.estimation_lag, \
+            'The estimation lag needs to be bigger than five samples.'
 
         # set the lag if it is not given
         if not self.lag:
@@ -68,6 +68,12 @@ class RuLSIF(Algorithm):
         # check the dimensions of the input array
         assert time_series.ndim == 1, "Time series needs to be an 1D array."
 
+        # check whether we want no updated estimation
+        if self.estimation_lag is None:
+            estimation_lag = len(time_series)+1
+        else:
+            estimation_lag = self.estimation_lag
+
         # compute the starting point of the scoring (past and future hankel need to fit)
         starting_point = self.window_length + self.n_windows + self.lag
         assert starting_point < time_series.shape[0], "The time series is too short to score any points."
@@ -77,20 +83,11 @@ class RuLSIF(Algorithm):
 
         # call the function to compute the values
         return _transform(time_series, starting_point, self.window_length, self.n_windows, self.lag,
-                          self.estimation_lag, self.estimator)
+                          estimation_lag, self.estimator)
 
 
 def _transform(time_series: np.ndarray, starting_point: int, window_length: int, n_windows: int, lag: int,
                estimation_lag: int, estimator: dre.Estimator) -> np.ndarray:
-
-    # compile the past hankel matrix (Y)
-    hankel_past = lg.compile_hankel(time_series, starting_point - lag, window_length, n_windows)
-
-    # compile the future hankel matrix (Y')
-    hankel_future = lg.compile_hankel(time_series, starting_point, window_length, n_windows)
-
-    # create the estimation for sigma and lambda via built in cross validation
-    estimator.train(hankel_past, hankel_future)
 
     # create the empty score vector
     score = np.zeros_like(time_series)
@@ -105,11 +102,11 @@ def _transform(time_series: np.ndarray, starting_point: int, window_length: int,
         hankel_future = lg.compile_hankel(time_series, idx, window_length, n_windows)
 
         # check whether we need the cross validation for the kernel width and position
-        if idx % estimation_lag == 0:
+        if (idx-starting_point) % estimation_lag == 0:
             estimator.train(hankel_past, hankel_future)
 
         # compute the score and save the returned feedback vector
-        score[idx] = estimator.apply(hankel_past, hankel_future)
+        score[idx] = estimator.apply(hankel_past, hankel_future) + estimator.apply(hankel_future, hankel_past)
 
     return score
 

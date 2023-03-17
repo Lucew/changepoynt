@@ -149,8 +149,7 @@ class AlphaRelativeDensityRatioEstimator(Estimator):
     def theta_hat(H_hat=None, h_hat=None, lambdaRegularizer=0.0, kernelBasis=None):
         """
         Calculates theta_hat given H_hat, h_hat, lambda, and the kernel basis function
-        Treat as a system of lienar equations and find the exact, optimal
-        solution
+        Treat as a system of linear equations and find the exact, optimal solution
         """
         theta_hat = linalg.solve(H_hat + (lambdaRegularizer * np.eye(kernelBasis)), h_hat)
 
@@ -397,10 +396,6 @@ class RULSIF(Estimator):
         """
         Learn the proper model parameters
         """
-
-        # Reset RNG to ensure consistency of experimental results.  In a production
-        # environment, the RNG should use a truly random seed and hyper-parameters
-        np.random.seed(0)
 
         self.gaussianCenters = self.generateGaussianCenters(referenceSamples)
 
