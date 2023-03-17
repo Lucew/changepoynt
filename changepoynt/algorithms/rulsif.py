@@ -1,12 +1,13 @@
 import numpy as np
 from changepoynt.utils import linalg as lg
-from changepoynt.utils import densityratioestimation as rse
+from changepoynt.utils import densityratioestimation as dre
+from changepoynt.algorithms.base_algorithm import Algorithm
 
 
-class RuLSIF:
+class RuLSIF(Algorithm):
     """
-    This class implements change point detection based on density ration estimation optimizing a least squares approach
-    from:
+    This class implements change point detection based on relative density ration estimation optimizing a least squares
+    approach from:
 
     [1]
     Liu, Song, et al.
@@ -17,10 +18,12 @@ class RuLSIF:
     calculations. We merely adopt some steps to account for the symmetric Pearson divergence used in [1]. We adopted
     the function RuLSIF(x, y, alpha, sigma_range, lambda_range, kernel_num=100, verbose=True) from the pacakge.
 
-    The code has simply been adopted from: densratio 0.3.0:
+    The code has been created looking at:
     - https://github.com/hoxo-m/densratio_py
     - https://pypi.org/project/densratio/
     - http://www.makotoyamada-ml.com/RuLSIF.html (Matlab implementation original author)
+
+    and was adopted from:
     - https://github.com/DeepOmics/rulsif_abrupt-change_detection
     and we can not thank the authors enough for writing such deep mathematical code!
     The reason for adoption were the one named above (symmetric pearson divergence)
@@ -58,7 +61,7 @@ class RuLSIF:
             self.lag = self.n_windows
 
         # create the estimator from the utils
-        self.estimator = rse.RULSIF(alpha=self.alpha, n_kernels=self.n_kernels)
+        self.estimator = dre.RULSIF(alpha=self.alpha, n_kernels=self.n_kernels)
 
     def transform(self, time_series: np.ndarray):
 
@@ -78,7 +81,7 @@ class RuLSIF:
 
 
 def _transform(time_series: np.ndarray, starting_point: int, window_length: int, n_windows: int, lag: int,
-               estimation_lag: int, estimator: rse.Estimator) -> np.ndarray:
+               estimation_lag: int, estimator: dre.Estimator) -> np.ndarray:
 
     # compile the past hankel matrix (Y)
     hankel_past = lg.compile_hankel(time_series, starting_point - lag, window_length, n_windows)
