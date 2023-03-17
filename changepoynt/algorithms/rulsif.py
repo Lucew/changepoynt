@@ -1,7 +1,6 @@
 import numpy as np
-import changepoynt.utils.densratios as drs
 from changepoynt.utils import linalg as lg
-from changepoynt.utils import rulsif_estimation as rse
+from changepoynt.utils import densityratioestimation as rse
 
 
 class RuLSIF:
@@ -58,6 +57,9 @@ class RuLSIF:
         if not self.lag:
             self.lag = self.n_windows
 
+        # create the estimator from the utils
+        self.estimator = rse.RULSIF(alpha=self.alpha, n_kernels=self.n_kernels)
+
     def transform(self, time_series: np.ndarray):
 
         # check the dimensions of the input array
@@ -72,11 +74,11 @@ class RuLSIF:
 
         # call the function to compute the values
         return _transform(time_series, starting_point, self.window_length, self.n_windows, self.lag,
-                          self.estimation_lag, self.alpha)
+                          self.estimation_lag, self.estimator)
 
 
 def _transform(time_series: np.ndarray, starting_point: int, window_length: int, n_windows: int, lag: int,
-               estimation_lag: int, alpha: float) -> np.ndarray:
+               estimation_lag: int, estimator: rse.Estimator) -> np.ndarray:
 
     # compile the past hankel matrix (Y)
     hankel_past = lg.compile_hankel(time_series, starting_point - lag, window_length, n_windows)
@@ -85,7 +87,6 @@ def _transform(time_series: np.ndarray, starting_point: int, window_length: int,
     hankel_future = lg.compile_hankel(time_series, starting_point, window_length, n_windows)
 
     # create the estimation for sigma and lambda via built in cross validation
-    estimator = rse.RULSIF()
     estimator.train(hankel_past, hankel_future)
 
     # create the empty score vector
@@ -106,42 +107,6 @@ def _transform(time_series: np.ndarray, starting_point: int, window_length: int,
 
         # compute the score and save the returned feedback vector
         score[idx] = estimator.apply(hankel_past, hankel_future)
-
-    return score
-
-
-def _transform2(time_series: np.ndarray, starting_point: int, window_length: int, n_windows: int, lag: int,
-               estimation_lag: int, alpha: float) -> np.ndarray:
-
-    # compile the past hankel matrix (Y)
-    hankel_past = lg.compile_hankel(time_series, starting_point - lag, window_length, n_windows)
-
-    # compile the future hankel matrix (Y')
-    hankel_future = lg.compile_hankel(time_series, starting_point, window_length, n_windows)
-
-    # create the estimation for sigma and lambda via built in cross validation
-    _, pe, sigma_result, lambda_result = drs.rulsif(hankel_past, hankel_future, alpha=alpha)
-    print(pe, sigma_result, lambda_result)
-
-    # create the empty score vector
-    score = np.zeros_like(time_series)
-
-    # iterate over all the values in the signal starting at start_idx computing the change point score
-    for idx in range(starting_point, time_series.shape[0]):
-
-        # compile the past hankel matrix (Y)
-        hankel_past = lg.compile_hankel(time_series, idx - lag, window_length, n_windows)
-
-        # compile the future hankel matrix (Y')
-        hankel_future = lg.compile_hankel(time_series, idx, window_length, n_windows)
-
-        # check whether we need the cross validation for the kernel width and position
-        if idx % estimation_lag == 0:
-            _, _, sigma_result, lambda_result = drs.rulsif(hankel_past, hankel_future, alpha=alpha)
-
-        # compute the score and save the returned feedback vector
-        _, score[idx], _, _ = drs.rulsif(hankel_past, hankel_future, alpha=alpha,
-                                         sigma_range=[sigma_result], lambda_range=[lambda_result])
 
     return score
 
