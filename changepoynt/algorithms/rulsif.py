@@ -53,8 +53,8 @@ class RuLSIF(Algorithm):
         assert 0 <= self.alpha < 1, 'The alpha parameter should be in the interval [0,1).'
 
         # check for the estimation lag
-        assert self.estimation_lag is None or 5 <= self.estimation_lag, \
-            'The estimation lag needs to be bigger than five samples.'
+        assert self.estimation_lag is None or 1 <= self.estimation_lag, \
+            'The estimation lag needs to be bigger than zero samples.'
 
         # set the lag if it is not given
         if not self.lag:
