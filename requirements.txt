@@ -3,3 +3,4 @@ numba~=0.56.4
 scipy~=1.10.1
 fbpca==1.0
 matplotlib==3.7.1
+stumpy==1.11.1
