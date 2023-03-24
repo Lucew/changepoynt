@@ -5,7 +5,7 @@ import stumpy
 
 class FLUSS(Algorithm):
     """
-    This class uses the FLOSS algorithm described in:
+    This class uses the FLUSS algorithm described in:
 
     [1]
     Gharghabi, Shaghayegh, et al.
@@ -43,9 +43,9 @@ class FLUSS(Algorithm):
         assert time_series.ndim == 1, "Time series needs to be an 1D array."
 
         # check that we have at least two windows
-        assert time_series.shape[0] > self.window_length
+        assert time_series.shape[0] > self.window_length, 'Time series needs to be longer than window length.'
 
-        # compute the floss score which is the amount of indix pointers over this sample
+        # compute the floss score which is the amount of index pointers over this sample
         # compared to an expected curve. It is capped by one.
         matrix_profile = stumpy.stump(time_series, m=self.window_length)
         corrected_arc_crossings, _ = stumpy.fluss(matrix_profile[:, 1], L=self.window_length, n_regimes=1)
