@@ -24,7 +24,8 @@ class TestSST:
         pass
 
     def test_default(self):
-        floss.FLOSS(20).transform(self.signal)
+        with pytest.raises(NotImplementedError):
+            floss.FLOSS(20).transform(self.signal)
 
 
 if __name__ == "__main__":

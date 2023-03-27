@@ -26,14 +26,14 @@ class FLOSS(Algorithm):
         :param window_length: the length of the window used for the distance comparisons in the matrix profile.
         :param initial_length: the length for the initial matrix profile length
         """
-
+        raise NotImplementedError('FLOSS is not yet fully functional.')
         # save the specified parameters into instance variables
         self.window_length = window_length
         self.initial_length = initial_length
 
         # set default initial length if necessary
         if not initial_length:
-            self.initial_length = 2*self.window_length
+            self.initial_length = 10*self.window_length
 
         # check for the size
         assert self.initial_length >= 2*self.window_length, 'The initial_length should be at least twice' \
@@ -57,8 +57,45 @@ class FLOSS(Algorithm):
             'Time series needs to be longer than specified initial length.'
 
         # feed it through the online process
+        print(self.initial_length, self.window_length)
         score = _transform(time_series, self.initial_length, self.window_length)
         return score
+
+
+def save_animation(mp, windows, time_series):
+    from matplotlib import animation
+    import os
+
+    fig, axs = plt.subplots(2, sharex=True, gridspec_kw={'hspace': 0})
+
+    axs[0].set_xlim((0, mp.shape[0]))
+    axs[0].set_ylim((min(time_series), max(time_series)))
+    axs[1].set_xlim((0, mp.shape[0]))
+    axs[1].set_ylim((-0.1, 1.1))
+
+    lines = []
+    for ax in axs:
+        line, = ax.plot([], [], lw=2)
+        lines.append(line)
+    line, = axs[1].plot([], [], lw=2)
+    lines.append(line)
+
+    def init():
+        for line in lines:
+            line.set_data([], [])
+        return lines
+
+    def animate(window):
+        data_out, cac_out = window
+        for line, data in zip(lines, [data_out, cac_out]):
+            line.set_data(np.arange(data.shape[0]), data)
+        return lines
+
+    anim = animation.FuncAnimation(fig, animate, init_func=init,
+                                   frames=windows, interval=100,
+                                   blit=True)
+    writergif = animation.PillowWriter(fps=5)
+    anim.save('semantic.gif', writer=writergif)
 
 
 def _transform(time_series: np.ndarray, start_idx: int, window_length: int) -> np.ndarray:
@@ -77,15 +114,26 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int) -> n
     matrix_profile = stumpy.stump(init_signal, m=window_length)
 
     # initialize the floss object
-    stream = stumpy.floss(matrix_profile, init_signal, m=window_length, L=window_length)
+    stream = stumpy.floss(matrix_profile, init_signal, m=window_length, L=window_length, excl_factor=1)
+
+    # make the score vector
+    score = np.ones_like(time_series)
+    score[:start_idx] = 0
 
     # iterate over all the values in the signal starting at start_idx computing the change point score
+    windows = []
     for idx in range(start_idx, time_series.shape[0]):
 
         # update the floss streaming module
         stream.update(time_series[idx])
 
-    return 1-stream.cac_1d_
+        # get the latest score (1-cac)
+        score[idx] -= stream.cac_1d_[-window_length+1]
+
+        if idx % 20 == 0:
+            windows.append((stream.T_, stream.cac_1d_))
+    save_animation(matrix_profile, windows, time_series)
+    return score
 
 
 def _main():
