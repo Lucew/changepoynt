@@ -9,5 +9,8 @@ def plot_data_and_score(raw_data, score):
     ax[1].plot(score, "r")
     ax[1].set_title("change score")
     x_grid, y_grid = np.meshgrid(np.arange(len(score)), np.linspace(*ax[0].get_ylim()))
-    z_grid = (score/np.max(score))[x_grid]
+    if np.max(score):
+        z_grid = (score/np.max(score))[x_grid]
+    else:
+        z_grid = score[x_grid]
     ax[0].contourf(x_grid, y_grid, z_grid, alpha=0.5, cmap="BuPu")
