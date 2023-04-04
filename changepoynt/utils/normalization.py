@@ -31,3 +31,33 @@ def min_max_scaling(time_series: np.ndarray, min_val: float = 0.0, max_val: floa
     # scale into the wished value range
     time_series = time_series * (max_val - min_val) + min_val
     return time_series
+
+
+def z_scaling(time_series: np.ndarray, inplace: bool = False) -> np.ndarray:
+    """
+    This function applie z-normalization to an 1D-array. It is inspired by:
+    https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.StandardScaler.html
+    but lighter and reimplemented in order to not introduce unnecessary dependencies for small functionality.
+
+    :param time_series: 1D array containing consecutive values for one feature
+    :param min_val: the minimum value the scaled time series will reach
+    :param max_val: the maximum value the scale time series will reach
+    :param inplace: boolean to specify whether the input array will be scaled and changed in place
+
+    :return: the scaled input array.
+    """
+    # make some assertion checks
+    assert time_series.ndim == 1, 'Time series needs to be an 1D array.'
+
+    # copy the time series if specified
+    if not inplace: time_series = time_series.copy()
+
+    # compute sample mean and sample variance
+    mean = np.mean(time_series)
+    std = np.std(time_series)
+
+    # subtract the mean
+    time_series -= mean
+    if std:
+        time_series /= std
+    return time_series
