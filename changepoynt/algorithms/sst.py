@@ -1,5 +1,4 @@
 import numpy as np
-from numba import jit
 from changepoynt.utils import linalg as lg
 from changepoynt.utils import normalization
 from typing import Callable
@@ -47,7 +46,7 @@ class SingularSpectrumTransformation(Algorithm):
 
     def __init__(self, window_length: int, n_windows: int = None, lag: int = None, rank: int = 5, scale: bool = True,
                  method: str = 'ika', lanczos_rank: int = None, random_rank: int = None,
-                 feedback_noise_level: float = 1e-3) -> None:
+                 feedback_noise_level: float = 1e-3, scoring_step: int = 1) -> None:
         """
         Initializing the Singular Spectrum Transformation (SST) requires setting a lot of parameters. See the parameters
         explanation for some intuition into the right choices. Currently, there are two SST methods from [1] and [2]
@@ -92,6 +91,8 @@ class SingularSpectrumTransformation(Algorithm):
         the seed of the power method for dominant eigenvector estimation with the precious dominant eigenvector
         plus the noise level specified here. The noise level should just be a small fraction of the value range
         of the signal.
+
+        :param scoring_step: the distance between scoring steps in samples.
         """
 
         # save the specified parameters into instance variables
@@ -104,6 +105,7 @@ class SingularSpectrumTransformation(Algorithm):
         self.lanczos_rank = lanczos_rank
         self.random_rank = random_rank
         self.noise = feedback_noise_level
+        self.scoring_step = scoring_step
 
         # set some default values when they have not been specified
         if self.n_windows is None:
@@ -172,11 +174,12 @@ class SingularSpectrumTransformation(Algorithm):
 
         # start the scaling itself by calling the jit compiled staticmethod and return the result
         score = _transform(time_series=time_series, start_idx=starting_point, window_length=self.window_length,
-                           n_windows=self.n_windows, lag=self.lag, scoring_function=scoring_function)
+                           n_windows=self.n_windows, lag=self.lag, scoring_step=self.scoring_step,
+                           scoring_function=scoring_function)
         return score
 
 
-def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_windows: int, lag: int,
+def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_windows: int, lag: int, scoring_step: int,
                scoring_function: Callable) -> np.ndarray:
     """
     Compute heavy and hopefully jit compilable score computation for the SST method. It does not do any parameter
@@ -187,6 +190,8 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
     :param window_length: the size of the time series window for each column of the hankel matrix
     :param n_windows: amount of columns in the hankel matrix
     :param lag: sample distance between future and past hankel matrix
+    :param scoring_step: the distance between scoring steps in samples.
+    :param scoring_function: the function that is called every step to asses a scalar change point score
     """
 
     # create initial vector for ika method with feedback dominant eigenvector as proposed in [2]
@@ -197,8 +202,11 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
     # initialize a scoring array with no values yet
     score = np.zeros_like(time_series)
 
+    # make an offset for the data construction
+    offset = (n_windows + lag)
+
     # iterate over all the values in the signal starting at start_idx computing the change point score
-    for idx in range(start_idx, time_series.shape[0]):
+    for idx in range(start_idx, time_series.shape[0], scoring_step):
 
         # compile the past hankel matrix (H1)
         hankel_past = lg.compile_hankel(time_series, idx-lag, window_length, n_windows)
@@ -207,7 +215,8 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
         hankel_future = lg.compile_hankel(time_series, idx, window_length, n_windows)
 
         # compute the score and save the returned feedback vector
-        score[idx], x1 = scoring_function(hankel_past, hankel_future, x0)
+        score[idx-offset-scoring_step//2:idx-offset+(scoring_step+1)//2], x1 = \
+            scoring_function(hankel_past, hankel_future, x0)
 
         # add noise to the dominant eigenvector and normalize it again
         x0 = x1 + 1e-3 * np.random.rand(x0.size)
