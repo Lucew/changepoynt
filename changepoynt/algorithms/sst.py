@@ -6,7 +6,7 @@ from functools import partial
 from changepoynt.algorithms.base_algorithm import Algorithm
 
 
-class SingularSpectrumTransformation(Algorithm):
+class SST(Algorithm):
     """
     This class implements all the utility and functionality necessary to compute the SST change point detection
     algorithm as described in:
