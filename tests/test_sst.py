@@ -25,7 +25,7 @@ class TestSST:
 
     def test_all_methods(self):
         # initialize random default method
-        sst = ssts.SingularSpectrumTransformation(30)
+        sst = ssts.SST(30)
 
         # get the different method names
         methods = list(sst.methods.keys())
@@ -33,15 +33,15 @@ class TestSST:
         # go through the methods and check execution
         for method in methods:
             LOGGER.info(f'Starting SST for method {method}')
-            ssts.SingularSpectrumTransformation(min(5, self.signal_length//2), rank=2,
+            ssts.SST(min(5, self.signal_length//2), rank=2,
                                                 method=method).transform(self.signal)
 
     def test_default(self):
-        ssts.SingularSpectrumTransformation(min(5, self.signal_length//2), rank=2).transform(self.signal)
+        ssts.SST(min(5, self.signal_length//2), rank=2).transform(self.signal)
 
     def test_unknown_method(self):
         with pytest.raises(AssertionError):
-            ssts.SingularSpectrumTransformation(10, method='asdafwegrhqh')
+            ssts.SST(10, method='asdafwegrhqh')
 
 
 if __name__ == "__main__":
