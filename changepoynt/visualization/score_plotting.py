@@ -15,3 +15,4 @@ def plot_data_and_score(raw_data, score):
         z_grid = score[x_grid]
     ax[0].contourf(x_grid, y_grid, z_grid, alpha=0.5, cmap="BuPu")
     ax[1].set_xlim(ax[0].get_xlim())
+    return f
