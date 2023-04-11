@@ -1,6 +1,6 @@
 import numpy as np
 from changepoynt.algorithms.base_algorithm import Algorithm
-# import claspy
+from claspy.segmentation import BinaryClaSPSegmentation
 
 
 class CLASP(Algorithm):
@@ -14,16 +14,41 @@ class CLASP(Algorithm):
 
     This class essentially wraps the claspy library
     https://github.com/ermshaua/claspy
+    https://sites.google.com/view/ts-clasp/
 
     TODO:
     Own implementation?
     """
 
-    def __init__(self, window_length: int, initial_length: int = None) -> None:
-        raise NotImplementedError('FLOSS is not yet fully functional.')
+    def __init__(self, n_segments="learn", n_estimators=10, window_size="suss", k_neighbours=3,
+                 distance="znormed_euclidean_distance", score="roc_auc",
+                 early_stopping=True, validation="significance_test", threshold=1e-15, excl_radius=5,
+                 random_state=2357) -> None:
+        # save the specified parameters into instance variables
+        self.n_segments = n_segments
+        self.n_estimators = n_estimators
+        self.window_size = window_size
+        self.k_neighbours = k_neighbours
+        self.distance = distance
+        self.score = score
+        self.early_stopping = early_stopping
+        self.validation = validation
+        self.threshold = threshold
+        self.excl_radius = excl_radius
+        self.random_state = random_state
 
     def transform(self, time_series: np.ndarray) -> np.ndarray:
-        pass
+        # check the dimensions of the input array
+        assert time_series.ndim == 1, "Time series needs to be an 1D array."
+
+        # make the clasp segmentation object
+        claspy_segmenter = BinaryClaSPSegmentation(n_segments=self.n_segments, n_estimators=self.n_estimators,
+                                                   window_size=self.window_size, k_neighbours=self.k_neighbours,
+                                                   score=self.score, early_stopping=self.early_stopping,
+                                                   validation=self.validation, threshold=self.threshold,
+                                                   excl_radius=self.excl_radius, random_state=self.random_state)
+        claspy_segmenter.fit(time_series)
+        return claspy_segmenter.profile
 
 
 def _main():
@@ -44,11 +69,11 @@ def _main():
     x += np.random.rand(x.size)
 
     # create the method
-    fluss_recognizer = CLASP(50)
+    clasp_recognizer = CLASP(50)
 
     # compute the score
     start = time()
-    score = fluss_recognizer.transform(x)
+    score = clasp_recognizer.transform(x)
     print(f'Computation for {len(x)} signal values took {time()-start} s.')
 
 
