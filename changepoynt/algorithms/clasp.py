@@ -16,6 +16,7 @@ class CLASP(Algorithm):
     https://github.com/ermshaua/claspy
     https://sites.google.com/view/ts-clasp/
 
+    In the current configuration it is recommended to set no parameters, as CLASP is able to extract it from the data.
     TODO:
     Own implementation?
     """
@@ -69,7 +70,7 @@ def _main():
     x += np.random.rand(x.size)
 
     # create the method
-    clasp_recognizer = CLASP(50)
+    clasp_recognizer = CLASP()
 
     # compute the score
     start = time()
