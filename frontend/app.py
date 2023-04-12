@@ -54,6 +54,7 @@ def app():
     st.title('Change Point Detection App.')
 
     # Add a file uploader component to the app
+    st.write("Caution with Data uploading! The connection might not be encrypted and the server is not secure.")
     uploaded_file = st.file_uploader('Choose a CSV file', type='csv')
     if uploaded_file is None:
 
