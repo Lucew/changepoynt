@@ -11,8 +11,7 @@ class ESST(Algorithm):
     """
     This class implements an own idea for change point detection.
 
-    TODO:
-    Implement GPU support and streaming? (FLOSS)
+    It is not yet published, please use with caution and do not copy or use in production (Lucas Weber, 2023).
     """
 
     def __init__(self, window_length: int, n_windows: int = None, lag: int = None, rank: int = 5, scoring_step: int = 1,
