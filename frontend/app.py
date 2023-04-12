@@ -79,7 +79,7 @@ def telegram_bot_sendtext(bot_message):
     if bot_token is None or bot_chat_id is None:
         st.error("Bot Token or Chat ID have not been set as environment variables.")
         return
-    send_text = 'https://api.telegram.og/bot' + bot_token + '/sendMessage?chat_id=' + bot_chat_id \
+    send_text = 'https://api.telegram.org/bot' + bot_token + '/sendMessage?chat_id=' + bot_chat_id \
                 + '&parse_mode=Markdown&text=' + bot_message
 
     # send the request
