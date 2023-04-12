@@ -1,4 +1,3 @@
-import setuptools.command.egg_info
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -27,14 +26,24 @@ def transform(transformer: Algorithm, signal: np.ndarray):
     return fig
 
 
-def create_example(duration: int = 2000, sampling_rate: int = 1, start_value: int = 100, end_value: int = 2,
-                   end_time: int = 1800):
-    df = pd.DataFrame(np.random.rand(2000, 4), columns=["RandA", "RandB", "RandC", "Signal"])
-    x = np.arange(0, duration, 1 / sampling_rate)
-    signal = np.ones_like(x) * start_value
-    end_index = int(end_time * sampling_rate)
-    signal[end_index:] = np.exp(np.log(end_value / start_value) / (duration - end_time) * (x[end_index:] - end_time))
+@st.cache_data
+def create_example():
+
+    # read the remote csv from the repository
+    # the raw file is from: ECML/PKDD 2023 Human Activity Segmentation Challenge
+    # https://github.com/patrickzib/human_activity_segmentation_challenge
+    modulation = pd.read_csv("https://raw.githubusercontent.com/Lucew/changepoynt/master/frontend/example.csv")
+    modulation = modulation["Signal"].values
+
+    # make some modulation on the time series
+    offset = 12
+    df = pd.DataFrame(np.random.rand(modulation.shape[0], 4), columns=["Signal", "RandA", "RandB", "RandC"])
+    x = np.arange(0, modulation.shape[0], 1, dtype=float)
+    signal = np.ones_like(x) * offset
+    end_index = int(signal.shape[0] * 0.65)
+    signal[end_index:] = np.exp(np.log(1/offset)/(signal.shape[0]*0.7-end_index) * (x[end_index:]-end_index)) * offset
     signal[signal < 0] = 0
+    signal += modulation
     df["Signal"] = signal
     return df
 
@@ -77,6 +86,13 @@ def app():
         st.write('Quick visualization of the CSV-File you uploaded:')
         return
 
+    # plot the signal
+    fig, ax = plt.subplots(figsize=(20, 1))
+    ax.plot(df[column].values)
+    ax.axis('off')
+    st.write("Minimalistic shape of your time series:")
+    st.pyplot(fig)
+
     # Add a sidebar for selecting the filter type
     algorithm = st.sidebar.selectbox('Select Algorithm', list(ALGS.keys()))
 
@@ -112,11 +128,6 @@ def app():
         duration = time.time()-start
         st.write(f"Running the algorithm took: {duration:0.3f} s.")
         st.pyplot(result)
-    else:
-        fig, ax = plt.subplots()
-        ax.plot(df[column].values[::sampling])
-        ax.set_title('Currently selected column.')
-        st.pyplot(fig)
 
 
 if __name__ == '__main__':
