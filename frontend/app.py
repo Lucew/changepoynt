@@ -27,8 +27,15 @@ def transform(transformer: Algorithm, signal: np.ndarray):
     return fig
 
 
-def create_example():
-    df = pd.DataFrame(np.random.rand(2000, 4), columns=list('ABCD'))
+def create_example(duration: int = 2000, sampling_rate: int = 1, start_value: int = 100, end_value: int = 2,
+                   end_time: int = 1800):
+    df = pd.DataFrame(np.random.rand(2000, 4), columns=["RandA", "RandB", "RandC", "Signal"])
+    x = np.arange(0, duration, 1 / sampling_rate)
+    signal = np.ones_like(x) * start_value
+    end_index = int(end_time * sampling_rate)
+    signal[end_index:] = np.exp(np.log(end_value / start_value) / (duration - end_time) * (x[end_index:] - end_time))
+    signal[signal < 0] = 0
+    df["Signal"] = signal
     return df
 
 
@@ -74,7 +81,7 @@ def app():
     algorithm = st.sidebar.selectbox('Select Algorithm', list(ALGS.keys()))
 
     # add a slider for the window size
-    sampling = st.slider("Select the Down-sampling", min_value=1, max_value=100, value=1, step=1)
+    sampling = st.slider("Select the Down-Sampling", min_value=1, max_value=100, value=1, step=1)
 
     # add a slider for the step size
     if algorithm == 'ESST' or algorithm == 'IKA-SST':
@@ -105,6 +112,11 @@ def app():
         duration = time.time()-start
         st.write(f"Running the algorithm took: {duration:0.3f} s.")
         st.pyplot(result)
+    else:
+        fig, ax = plt.subplots()
+        ax.plot(df[column].values[::sampling])
+        ax.set_title('Currently selected column.')
+        st.pyplot(fig)
 
 
 if __name__ == '__main__':
