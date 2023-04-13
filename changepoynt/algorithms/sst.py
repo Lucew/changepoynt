@@ -191,7 +191,7 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
     :param n_windows: amount of columns in the hankel matrix
     :param lag: sample distance between future and past hankel matrix
     :param scoring_step: the distance between scoring steps in samples.
-    :param scoring_function: the function that is called every step to asses a scalar change point score
+    :param scoring_function: the function that is called every step to assess a scalar change point score
     """
 
     # create initial vector for ika method with feedback dominant eigenvector as proposed in [2]
@@ -203,7 +203,7 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
     score = np.zeros_like(time_series)
 
     # make an offset for the data construction
-    offset = (n_windows + lag)
+    offset = n_windows//2+lag
 
     # iterate over all the values in the signal starting at start_idx computing the change point score
     for idx in range(start_idx, time_series.shape[0], scoring_step):
@@ -416,10 +416,10 @@ if __name__ == '__main__':
     x += np.random.rand(x.size)
 
     # create the sst method
-    ika_sst = SingularSpectrumTransformation(31, method='ika')
-    svd_sst = SingularSpectrumTransformation(31, method='svd')
-    rsvd_sst = SingularSpectrumTransformation(31, method='rsvd')
-    fbrsvd_sst = SingularSpectrumTransformation(31, method='fbrsvd')
+    ika_sst = SST(31, method='ika')
+    svd_sst = SST(31, method='svd')
+    rsvd_sst = SST(31, method='rsvd')
+    fbrsvd_sst = SST(31, method='fbrsvd')
 
     # make the scoring
     start = time()
