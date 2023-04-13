@@ -97,7 +97,13 @@ def telegram_bot_sendtext(bot_message):
 
 
 def create_score_download(signal: np.ndarray, score: np.ndarray):
-    new = pd.DataFrame({"Signal": signal, "Changepoint-Score": score})
+
+    # pad the score with zeros
+    tmp = np.zeros_like(signal)
+    tmp[:score.shape[0]] = score
+
+    # create dataframe and convert to csv
+    new = pd.DataFrame({"Signal": signal, "Changepoint-Score": tmp})
     return new.to_csv()
 
 
