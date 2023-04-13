@@ -27,11 +27,11 @@ def transform(transformer: Algorithm, signal: np.ndarray):
 
     # filter the signal with the algorithm
     with st.spinner('Wait for the algorithm to run...'):
-        result = transformer.transform(signal)
+        score = transformer.transform(signal)
 
         # plot the result of the algorithm
-        fig = plot_data_and_score(signal, result)
-    return fig
+        fig = plot_data_and_score(signal, score)
+    return fig, score
 
 
 def get_remote_ip() -> str:
@@ -94,6 +94,11 @@ def telegram_bot_sendtext(bot_message):
     except requests.exceptions.JSONDecodeError:
         response = None
     return response
+
+
+def create_score_download(signal: np.ndarray, score: np.ndarray):
+    new = pd.DataFrame({"Signal": signal, "Changepoint-Score": score})
+    return new.to_csv()
 
 
 # Define the Streamlit app
@@ -181,13 +186,37 @@ def app():
     placeholder = st.empty()
     run_algorithm = placeholder.button("Run.", key=1)
     if run_algorithm:
+
+        # start time measurement
         start = time.time()
+
+        # disable the run button while running the code
         placeholder.button('Run.', disabled=True, key=2)
-        result = transform(transformer, df[column].values[::sampling])
+
+        # create the signal from the dataframe
+        signal = df[column].values[::sampling]
+
+        # compute the change point score result
+        figure, score= transform(transformer, signal)
+
+        # enable the run button again
         placeholder.button('Run.', disabled=False, key=3)
+
+        # check the elapsed time
         duration = time.time()-start
+
+        # output the time it took to make the complete transformation
         st.write(f"Running the algorithm took: {duration:0.3f} s.")
-        st.pyplot(result)
+
+        # plot the result onto the page
+        st.pyplot(figure)
+
+        btn = st.download_button(
+            label="Download Score",
+            data=create_score_download(signal, score),
+            file_name=f"changepoint_score_{algorithm}_{column}.csv",
+            mime="text/csv"
+        )
 
 
 if __name__ == '__main__':
