@@ -6,3 +6,4 @@ seaborn==0.12.2
 jupyter==1.0.0
 fbpca==1.0
 stumpy==1.11.1
+claspy==0.1.6

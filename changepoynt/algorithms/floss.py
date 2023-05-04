@@ -57,12 +57,12 @@ class FLOSS(Algorithm):
             'Time series needs to be longer than specified initial length.'
 
         # feed it through the online process
-        print(self.initial_length, self.window_length)
         score = _transform(time_series, self.initial_length, self.window_length)
         return score
 
 
 def save_animation(mp, windows, time_series):
+    import matplotlib.pyplot as plt
     from matplotlib import animation
     import os
 
@@ -79,6 +79,9 @@ def save_animation(mp, windows, time_series):
         lines.append(line)
     line, = axs[1].plot([], [], lw=2)
     lines.append(line)
+
+    # mark the window lengths
+    axs[1].plot([401, 401], (0, mp.shape[0]))
 
     def init():
         for line in lines:
@@ -117,8 +120,8 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int) -> n
     stream = stumpy.floss(matrix_profile, init_signal, m=window_length, L=window_length, excl_factor=1)
 
     # make the score vector
-    score = np.ones_like(time_series)
-    score[:start_idx] = 0
+    score = np.zeros_like(time_series)
+    score[:start_idx] = 1
 
     # iterate over all the values in the signal starting at start_idx computing the change point score
     windows = []
@@ -128,12 +131,11 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int) -> n
         stream.update(time_series[idx])
 
         # get the latest score (1-cac)
-        score[idx] -= stream.cac_1d_[-window_length+1]
+        score[idx] = stream.cac_1d_[-window_length-2]
 
-        if idx % 20 == 0:
-            windows.append((stream.T_, stream.cac_1d_))
+        if idx % 20 == 0: windows.append((stream.T_, stream.cac_1d_))
     save_animation(matrix_profile, windows, time_series)
-    return score
+    return 1-score
 
 
 def _main():
@@ -143,6 +145,7 @@ def _main():
     :return:
     """
     from time import time
+    import matplotlib.pyplot as plt
     # make synthetic step function
     np.random.seed(123)
     # synthetic (frequency change)
@@ -159,6 +162,9 @@ def _main():
     # compute the score
     start = time()
     score = fluss_recognizer.transform(x)
+    plt.plot(x)
+    plt.plot(score)
+    plt.show()
     print(f'Computation for {len(x)} signal values took {time()-start} s.')
 
 
