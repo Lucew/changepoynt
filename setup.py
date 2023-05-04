@@ -10,6 +10,11 @@ with open(path.join(this_directory, 'requirements.txt'), encoding='utf-8') as f:
 with open(path.join(this_directory, 'requirements_tests.txt'), encoding='utf-8') as f:
     requirements_tests = f.read().splitlines()
 
+# read content of the readme
+with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
+    long_description = f.read()
+    print(long_description)
+
 
 def main():
 
@@ -19,8 +24,9 @@ def main():
         author="Lucas Weber",
         author_email="weber-lucas@web.de",
         url="https://github.com/Lucew/changepoynt",
-        description="Readable package for several change point detection methods implemented in python.",
-        long_description="This package contains several readable change point detections methods in python.",
+        description="Several change point detection methods implemented in python.",
+        long_description=long_description,
+        long_description_content_type='text/markdown',
         zip_safe=False,
         include_package_data=True,
         packages=find_packages(exclude=['tests']),
