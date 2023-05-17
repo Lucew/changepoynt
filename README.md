@@ -20,7 +20,27 @@ The package is aimed at execution performance (using JIT compilation and standin
 
 All of our algorithms are implementations of a base changepoint detection interface and therefore are interchangeable. Currently, we are focused on shifting to the very common and existing sklearn interface of fit and predict. This enables our algorithms to be part of the standard sklearn pipeline for preprocessing.
 
+# Examples
+
+You can find example code within the examples folder of this repository. We also wanted to tease the
+functionality using two different signals in order to show the capabilities of one of our recommended algorithms
+[ESST](./changepoynt/algorithms/esst.py).
+
+The first application is a simulated temperature of a component in a power plant during shutdown.
+We artificially added a disturbance at the end of the shutdown, to show the capability of the algorithm to
+detect a change even in case of another major change.
+
+![image](./images/simulated_temperature_behavior.png)
+
+The other application is for anomaly detection within periodic signals. The example is time series
+34 from the
+[Hexagon ML/UCR Time Series Anomaly Detection dataset](https://www.cs.ucr.edu/~eamonn/time_series_data_2018/), where we
+set the window size for the ESST to three times the estimated period in samples (estimated using maximum of FFT).
+
+![image](./images/034_UCR_Anomaly_DISTORTEDInternalBleeding6_1500_3474_3629.png)
  
+Both plots have been created using `changepoynt.algorithms.esst` and the plot function from 
+`changepoynt.visualization.score_plotting`.
 
 # Installation
 
