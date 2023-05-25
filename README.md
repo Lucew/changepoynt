@@ -10,7 +10,7 @@ Current algorithms come from the field of:
 
 * Statistics (Detection of Change in the statistical properties)
 
-* Time Series Segmentation (Algorithms focused on comparing time series shap)
+* Time Series Segmentation (Algorithms focused on comparing time series shape)
 
  
 
@@ -18,13 +18,15 @@ The package is aimed at execution performance (using JIT compilation and standin
 
  
 
-All of our algorithms are implementations of a base changepoint detection interface and therefore are interchangeable. Currently, we are focused on shifting to the very common and existing sklearn interface of fit and predict. This enables our algorithms to be part of the standard sklearn pipeline for preprocessing.
+All of our algorithms are implementations of a base changepoint detection interface and therefore are interchangeable. Currently, we are focused on shifting to the very common and existing sklearn interface of fit and transform. This enables our algorithms to be part of the standard sklearn pipeline for preprocessing.
 
 # Examples
 
 You can find example code within the examples folder of this repository. We also wanted to tease the
 functionality using two different signals in order to show the capabilities of one of our recommended algorithms
-[ESST](./changepoynt/algorithms/esst.py).
+[ESST](./changepoynt/algorithms/esst.py). If you want to use the algorithms on the contents of a CSV
+directly, there is a frontend demonstrator currently hosted [here](http://static.17.221.107.91.clients.your-server.de/)
+. Please note that the connection is not http-encrypted The code can also be found in the [repository](https://github.com/Lucew/changepoynt/tree/master/frontend).
 
 The first application is a simulated temperature of a component in a power plant during shutdown.
 We artificially added a disturbance at the end of the shutdown, to show the capability of the algorithm to
