@@ -25,8 +25,7 @@ All of our algorithms are implementations of a base changepoint detection interf
 You can find example code within the examples folder of this repository. We also wanted to tease the
 functionality using two different signals in order to show the capabilities of one of our recommended algorithms
 [ESST](./changepoynt/algorithms/esst.py). If you want to use the algorithms on the contents of a CSV
-directly, there is a frontend demonstrator currently hosted [here](http://static.17.221.107.91.clients.your-server.de/)
-. Please note that the connection is not http-encrypted The code can also be found in the [repository](https://github.com/Lucew/changepoynt/tree/master/frontend).
+directly, there is a frontend demonstrator currently hosted [here](http://static.17.221.107.91.clients.your-server.de/) (please note that the connection is not http-encrypted, code can also be found in the [repository](https://github.com/Lucew/changepoynt/tree/master/frontend)).
 
 The first application is a simulated temperature of a component in a power plant during shutdown.
 We artificially added a disturbance at the end of the shutdown, to show the capability of the algorithm to
