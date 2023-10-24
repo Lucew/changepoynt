@@ -42,7 +42,7 @@ steady_after = np.exp(-5)*np.ones(150)
 steady_before = np.ones(200)
 sine_after = 0.2*np.sin(np.linspace(0, 3*np.pi*10, 300))
 
-# make the signal by concatenating the differen parts
+# make the signal by concatenating the different parts and adding some noise
 signal = np.concatenate((steady_before, exp_signal, steady_after, sine_after))
 signal += 0.01*np.random.randn(signal.shape[0])
 
