@@ -36,22 +36,21 @@ import matplotlib.pyplot as plt  # to show the plot
 from changepoynt.algorithms.esst import ESST  # import the scoring algorithm
 from changepoynt.visualization.score_plotting import plot_data_and_score  # import a visualization function
 
-# create a signal that goes from steady to exponential decline into a sine curve
+# simulate a signal that goes from exponential decline into a sine wave
+# the signals is only for demonstration purposes and can be replaced by your signal
+steady_before = np.ones(200)
 exp_signal = np.exp(-np.linspace(0, 5, 200))
 steady_after = np.exp(-5)*np.ones(150)
-steady_before = np.ones(200)
 sine_after = 0.2*np.sin(np.linspace(0, 3*np.pi*10, 300))
-
-# make the signal by concatenating the different parts and adding some noise
 signal = np.concatenate((steady_before, exp_signal, steady_after, sine_after))
-signal += 0.01*np.random.randn(signal.shape[0])
+signal += 0.01*np.random.randn(signal.shape[0])  # add some minor noise
 
 # This part is all you need to do to score a signal with our package 
 # create the scorer and compute the change score
 detector = ESST(30)
 detection = detector.transform(signal)
 
-# make the plot                                                       
+# make the plot using the built-in function of the package                                               
 plot_data_and_score(signal, detection)
 plt.show()
 
@@ -116,6 +115,6 @@ not want to be in the way!
 We are actively working on the package, and currently have the following steps planned:
 
 - Implement Kliep/RulSif as statistical change point detections using direct density estimation
-- We are actively working on a benchmark tool for change poing algorithms
+- We are actively working on a benchmark tool for change point algorithms
 
 If you have further ideas, do not hesitate to open a ticket or a pull request!
