@@ -96,7 +96,7 @@ following line with pip:
  
 
 Please be aware, that we are currently in an alpha development phase, as this is part of a research project at the FAU 
-Erlangen together with SIEMENS Energy developed by [me](https://www.cs6.tf.fau.eu/person/lucas-weber/). Nevertheless, 
+Erlangen together with SIEMENS Energy developed by [me](https://www.cs6.tf.fau.de/person/lucas-weber/). Nevertheless, 
 we aim to be open-source and try our best to guarantee that all the code we use has very permissive licenses.
 
 # Participating
