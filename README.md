@@ -100,22 +100,23 @@ Please be aware, that we are currently in an alpha development phase, as this is
 Erlangen together with SIEMENS Energy developed by [me](https://www.cs6.tf.fau.de/person/lucas-weber/). Nevertheless, 
 we aim to be open-source and try our best to guarantee that all the code we use has very permissive licenses.
 
-# Available Algorithms
+# Algorithms
 
-The following algorithms are currently available within *changepoynt*.
+We are actively working on the package. Therefore, some algorithms are already available, while others
+are currently under development. An overview with sources can be seen here:
 
-| Algorithm | Source                                                                            | Status                     |
-|-----------|-----------------------------------------------------------------------------------|----------------------------|
-| SST       | [Idé](https://epubs.siam.org/doi/abs/10.1137/1.9781611972757.63)                  | Stable  :heavy_check_mark: |
-| IKA-SST   | [Idé](https://epubs.siam.org/doi/abs/10.1137/1.9781611972771.54)                  | Stable  :heavy_check_mark: |
-| RSST      | Weber                                                                             | Experimental               |
-| RuLSIF    | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270) | Testing                    |
-| uLSIF     | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270) | Testing                    |
-| KLIEP     | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270) | Planned                    |
-| ClaSP     | [Ermshaus et al.](https://link.springer.com/article/10.1007/s10618-023-00923-x)   | Stable :heavy_check_mark:  |
-| FLUSS     | [Gharghabi et al.](https://ieeexplore.ieee.org/abstract/document/8215484)         | Stable :heavy_check_mark:  |
-| FLOSS     | [Gharghabi et al.](https://ieeexplore.ieee.org/abstract/document/8215484)         | Stable :heavy_check_mark:  |
-| BOCPD     | [Adamns et al.](https://arxiv.org/abs/0710.3742)                                  | Planned                    |
+| Algorithm | Source                                                                            | Status                      |
+|-----------|-----------------------------------------------------------------------------------|-----------------------------|
+| SST       | [Idé](https://epubs.siam.org/doi/abs/10.1137/1.9781611972757.63)                  | Stable  :heavy_check_mark:  |
+| IKA-SST   | [Idé](https://epubs.siam.org/doi/abs/10.1137/1.9781611972771.54)                  | Stable  :heavy_check_mark:  |
+| RSST      | Weber                                                                             | Experimental                |
+| RuLSIF    | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270) | Testing                     |
+| uLSIF     | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270) | Testing                     |
+| KLIEP     | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270) | Planned                     |
+| ClaSP     | [Ermshaus et al.](https://link.springer.com/article/10.1007/s10618-023-00923-x)   | Stable :heavy_check_mark:   |
+| FLUSS     | [Gharghabi et al.](https://ieeexplore.ieee.org/abstract/document/8215484)         | Stable :heavy_check_mark:   |
+| FLOSS     | [Gharghabi et al.](https://ieeexplore.ieee.org/abstract/document/8215484)         | Stable :heavy_check_mark:   |
+| BOCPD     | [Adams et al.](https://arxiv.org/abs/0710.3742)                                   | Planned                     |
 
 
 
