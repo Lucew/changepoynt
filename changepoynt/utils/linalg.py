@@ -43,7 +43,7 @@ def power_method(a_matrix: np.ndarray, x_vector: np.ndarray, n_iterations: int) 
     return eigenvalue, (a_matrix @ x_vector)/eigenvalue
 
 
-@jit(nopython=True)
+# @jit(nopython=True)
 def lanczos(a_matrix: np.ndarray, r_0: np.ndarray, k: int) -> (np.ndarray, np.ndarray):
     """
     This function computes the tri-diagonalization matrix from the square matrix C which is the result of the lanczos
@@ -72,7 +72,7 @@ def lanczos(a_matrix: np.ndarray, r_0: np.ndarray, k: int) -> (np.ndarray, np.nd
     betas = np.ones(shape=(k + 1,), dtype=np.float64)
 
     # Subroutine 1 of the paper
-    for j in range(k + 1):
+    for j in range(k):
         # compute r_(j+1)
         new_q = r_i / betas[j]
 
