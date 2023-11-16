@@ -4,6 +4,7 @@
  - [Quickstart](#quickstart)
  - [Examples](#examples)
  - [Algorithms](#algorithms)
+ - [Installation](#installation)
  - [Contributing](#contributing)
  - [Outlook](#outlook)
 
