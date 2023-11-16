@@ -1,6 +1,11 @@
 # Python Changepoint Detection (changepoynt)
 
- 
+**Table of content:**
+ - [Quickstart](#quickstart)
+ - [Examples](#examples)
+ - [Algorithms](#algorithms)
+ - [Contributing](#contributing)
+ - [Outlook](#outlook)
 
 This is the repository hosting the **pip-installable** python package changepoynt. It implements several 
 change point detection techniques, while focusing mostly on "localized" algorithms, that could be run in an online 
@@ -27,7 +32,7 @@ All of our algorithms are implementations of a base changepoint detection interf
 Currently, we are focused on shifting to the very common and existing sklearn interface of fit and transform. This 
 enables our algorithms to be part of the standard sklearn pipeline for preprocessing.
 
-# Quick Start
+# Quick Start <a id="quickstart"></a>
 If you want to start using the package right away, we recommend to use one of the singular spectrum transformation
 algorithms (SST). The first step is to install the package using pip. Then you can use the following example code:
 
@@ -60,7 +65,7 @@ plt.show()
 The result looks like this:
 ![image](./images/minimal_example_result.png)
 
-# Examples
+# Examples <a id="examples"></a>
 
 You can find example code within the examples folder of this repository. We also wanted to tease the
 functionality using two different signals in order to show the capabilities of one of our recommended algorithms
@@ -85,7 +90,7 @@ set the window size for the ESST to three times the estimated period in samples 
 Both plots have been created using `changepoynt.algorithms.esst` and the plot function from 
 `changepoynt.visualization.score_plotting`.
 
-# Installation
+# Installation <a id="installation"></a>
 
 You can install `changepoynt` from the common package index [PyPi](https://pypi.org/project/changepoynt/) using the 
 following line with pip:
@@ -100,7 +105,7 @@ Please be aware, that we are currently in an alpha development phase, as this is
 Erlangen together with SIEMENS Energy developed by [me](https://www.cs6.tf.fau.de/person/lucas-weber/). Nevertheless, 
 we aim to be open-source and try our best to guarantee that all the code we use has very permissive licenses.
 
-# Algorithms
+# Algorithms <a id="algorithms"></a>
 
 We are actively working on the package. Therefore, some algorithms are already available, while others
 are currently under development. An overview with sources can be seen here:
@@ -120,7 +125,7 @@ are currently under development. An overview with sources can be seen here:
 
 
 
-# Participating
+# Contributing <a id="contributing"></a>
 
 We always love to get feedback or new ideas. If you have any of those, feel free to open an issue. We try to get back to
 you as soon as we can.
@@ -131,7 +136,7 @@ If you are an author of a paper in the field or have another algorithmic idea: F
 Currently, we are still working on the contribution guides. But if somebody already comes along and has an idea, we do 
 not want to be in the way!
 
-# Outlook
+# Outlook <a id="outlook"></a>
 
 We are actively working on the package, and currently have the following steps planned:
 
