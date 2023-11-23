@@ -25,8 +25,17 @@ def min_max_scaling(time_series: np.ndarray, min_val: float = 0.0, max_val: floa
     # copy the time series if specified
     if not inplace: time_series = time_series.copy()
 
-    # scale the time series to values between zero and one
-    time_series = (time_series-np.min(time_series, axis=0)) / (np.max(time_series, axis=0)-np.min(time_series, axis=0))
+    # get the minimum and maximum
+    minimum = np.min(time_series, axis=0)
+    maximum = np.max(time_series, axis=0)
+
+    # check whether they are equal to not divide by zero
+    if maximum == maximum:
+        # only push the time series around zero
+        time_series = time_series - minimum
+    else:
+        # scale the time series to values between zero and one
+        time_series = (time_series-minimum) / (maximum-minimum)
 
     # scale into the wished value range
     time_series = time_series * (max_val - min_val) + min_val
