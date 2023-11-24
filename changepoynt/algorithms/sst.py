@@ -291,7 +291,7 @@ def _rayleigh_singular_value_decomposition(hankel_past: np.ndarray, hankel_futur
 
     # compute the projection distance
     alpha = eigvecs_past.T @ eigvec_future
-    return 1 - alpha.T @ alpha, x0
+    return 1 - alpha.sum(), eigvec_future
 
 
 def _lanczos_singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
@@ -326,7 +326,7 @@ def _lanczos_singular_value_decomposition(hankel_past: np.ndarray, hankel_future
 
     # compute the projection distance
     alpha = eigvecs_past.T @ eigvec_future
-    return 1 - alpha.T @ alpha, x0
+    return 1 - alpha.T @ alpha, eigvec_future
 
 
 def _randomized_singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
