@@ -30,7 +30,7 @@ def min_max_scaling(time_series: np.ndarray, min_val: float = 0.0, max_val: floa
     maximum = np.max(time_series, axis=0)
 
     # check whether they are equal to not divide by zero
-    if maximum == maximum:
+    if maximum == minimum:
         # only push the time series around zero
         time_series = time_series - minimum
     else:
