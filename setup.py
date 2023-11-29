@@ -20,7 +20,7 @@ def main():
 
     setup(
         name="changepoynt",
-        version="0.0.5",
+        version="0.0.6",
         author="Lucas Weber",
         author_email="weber-lucas@web.de",
         url="https://github.com/Lucew/changepoynt",
