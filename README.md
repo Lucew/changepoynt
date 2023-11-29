@@ -64,7 +64,7 @@ plt.show()
 ```
 
 The result looks like this:
-![image](./images/minimal_example_result.png)
+![image](https://github.com/Lucew/changepoynt/raw/master/images/minimal_example_result.png)
 
 # Examples <a id="examples"></a>
 
@@ -79,14 +79,14 @@ The first application is a simulated temperature of a component in a power plant
 We artificially added a disturbance at the end of the shutdown, to show the capability of the algorithm to
 detect a change even in case of another major change.
 
-![image](./images/simulated_temperature_behavior.png)
+![image](https://github.com/Lucew/changepoynt/raw/master/images/simulated_temperature_behavior.png)
 
 The other application is for anomaly detection within periodic signals. The example is time series
 34 from the
 [Hexagon ML/UCR Time Series Anomaly Detection dataset](https://www.cs.ucr.edu/~eamonn/time_series_data_2018/), where we
 set the window size for the ESST to three times the estimated period in samples (estimated using maximum of FFT).
 
-![image](./images/034_UCR_Anomaly_DISTORTEDInternalBleeding6_1500_3474_3629.png)
+![image](https://github.com/Lucew/changepoynt/raw/master/images/034_UCR_Anomaly_DISTORTEDInternalBleeding6_1500_3474_3629.png)
  
 Both plots have been created using `changepoynt.algorithms.esst` and the plot function from 
 `changepoynt.visualization.score_plotting`.
