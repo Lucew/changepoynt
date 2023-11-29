@@ -19,7 +19,8 @@ class ESST(Algorithm):
     def __init__(self, window_length: int, n_windows: int = None, lag: int = None, rank: int = 5,
                  scale: bool = True, scoring_step: int = 1, parallel=False) -> None:
         """
-        We initialize the matrix profile and the subsequent floss using only the window length used for comarisons.
+        Experimental change point detection method evaluation the prevalence of change points within a signal
+        by comparing the difference in eigenvectors between to points in time.
 
         :param window_length: This specifies the length of the time series (in samples), which will be used to extract
         the representative "eigensignals" to be compared before and after the lag. The windows length should be big
