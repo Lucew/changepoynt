@@ -16,12 +16,36 @@ class ESST(Algorithm):
     It is not yet published, please use with caution and do not copy or use in production (Lucas Weber, 2023).
     """
 
-    def __init__(self, window_length: int, n_windows: int = None, lag: int = None, rank: int = 5, scoring_step: int = 1,
-                 scale: bool = True, parallel=False) -> None:
+    def __init__(self, window_length: int, n_windows: int = None, lag: int = None, rank: int = 5,
+                 scale: bool = True, scoring_step: int = 1, parallel=False) -> None:
         """
         We initialize the matrix profile and the subsequent floss using only the window length used for comarisons.
 
-        :param window_length: the length of the window used for the distance comparisons in the matrix profile.
+        :param window_length: This specifies the length of the time series (in samples), which will be used to extract
+        the representative "eigensignals" to be compared before and after the lag. The windows length should be big
+        enough to cover any wanted patterns (e.g. bigger than the periodicity of periodic signals).
+
+        :param n_windows: This specifies the amount of consecutive time windows used to extract the "eigensignals" from
+        the given time series. It should be big enough to cover different parts of the target behavior. If one does not
+        specify this value, we use the rule of thumb and take as many time windows as you specified the length of the
+        window (rule of thumb).
+
+        :param lag: This parameter specifies the distance of the comparison for behaviors. In easy terms it tells the
+        algorithms how far it should look into the future to find change in behavior to the current signal. If you do
+        not specify this parameter, we use a rule of thumb and look ahead half of the window length you specified to
+        cover the behavior.
+
+        :param rank: This parameter specifies the amount of "eigensignals" which will be used to measure the
+        dissimilarity of the signal in the future behavior. As a rule of thumb we take the five most dominant
+        "eigensignals" if you do no specify otherwise.
+
+        :param scale: Due to numeric stability we REALLY RECOMMEND scaling the signal into a restricted value range. Per
+        default, we use a min max scaling to ensure a restricted value range. In the presence of extreme outliers this
+        could cause problems, as the signal will be squished.
+
+        :param scoring_step: the distance between scoring steps in samples (e.g. 2 would half the computation).
+
+        :param parallel: the execution for the different steps can be parallelized in different processes.
         """
 
         # save the specified parameters into instance variables
