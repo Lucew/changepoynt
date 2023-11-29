@@ -92,7 +92,7 @@ class SST(Algorithm):
         plus the noise level specified here. The noise level should just be a small fraction of the value range
         of the signal.
 
-        :param scoring_step: the distance between scoring steps in samples.
+        :param scoring_step: the distance between scoring steps in samples (e.g. 2 would half the computation).
         """
 
         # save the specified parameters into instance variables
