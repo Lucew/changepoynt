@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+dynamic = ["dependencies", "optional-dependencies"]
+name = "changepoynt"
+version = "0.0.7"
+authors = [
+  { name="Lucas Weber", email="weber-lucas@web.de" },
+]
+description = "Several change point detection methods implemented in python."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering",
+]
+license = {file = "LICENSE"}
+keywords = ['changepoint', 'timeseries', 'engineering']
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+optional-dependencies = {test = { file = ["requirements_tests.txt"] }, example = { file = ["requirements_examples.txt"] }}
+
+[project.urls]
+Homepage = "https://github.com/Lucew/changepoynt"
+Issues = "https://github.com/Lucew/changepoynt/issues"
+
+[tool.setuptools]
+packages = ["changepoynt", "changepoynt.algorithms", "changepoynt.utils", "changepoynt.visualization"]
