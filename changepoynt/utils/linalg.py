@@ -278,7 +278,7 @@ def compile_hankel(time_series: np.ndarray, end_index: int, window_size: int, ra
 
     # go through the time series and make the hankel matrix
     for cx in range(rank):
-        hankel[:, cx] = time_series[(end_index-window_size-cx*lag):(end_index-cx*lag)]
+        hankel[:, -cx-1] = time_series[(end_index-window_size-cx*lag):(end_index-cx*lag)]
     return hankel
 
 
