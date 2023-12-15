@@ -136,7 +136,7 @@ def rayleigh_ritz_singular_value_decomposition(a_matrix: np.ndarray, k: int) -> 
     return eigenvalues, eigenvectors
 
 
-def randomized_singular_value_decomposition(a_matrix: np.ndarray, randomized_rank: int) -> (np.ndarray, np.ndarray):
+def facebook_randomized_svd(a_matrix: np.ndarray, randomized_rank: int) -> (np.ndarray, np.ndarray):
     """
     This function implements randomized singular vector decomposition of a matrix as surveyed and described in
 
@@ -146,49 +146,11 @@ def randomized_singular_value_decomposition(a_matrix: np.ndarray, randomized_ran
 
     on page 4 chapter 1.3 and further.
 
-    It also incoporates ideas from
-
-    Szlam, Arthur, Yuval Kluger, and Mark Tygert.
-    "An implementation of a randomized algorithm for principal component analysis."
-    arXiv preprint arXiv:1412.3510 (2014).
-
-    in order to further imprint the highest eigenvectors into the approximation matrix after multiplying with the
-    randomized matrix.
-
-    This implementation is generally inspired by
-    https://scikit-learn.org/stable/modules/generated/sklearn.utils.extmath.randomized_svd.html
-    but reimplemented as we wanted to save dependencies and use jit compiled code.
-
     :param a_matrix: 2D-Matrix filled with floats for which we want to find the left eigenvectors
     :param randomized_rank: the rank of the noise matrix used for randomized svd. the higher the rank, the better the
     approximation but the lower the precision of the eigenvectors
     :return:
     """
-
-    # construct the random matrix for multiplication with the matrix we want to decompose
-    approximation_matrix = np.random.normal(size=(a_matrix.shape[1], randomized_rank))
-
-    # perform power iterations to further "enhance" the top singular of the hankel matrix into Q
-    a_square = a_matrix.T @ a_matrix
-    for _ in range(3):
-        approximation_matrix = a_square @ approximation_matrix
-
-    # extract the orthonormal base of the approximation matrix
-    q_substitute, _ = np.linalg.qr(a_matrix @ approximation_matrix)
-
-    # project the hankel matrix onto the lower dimensional orthonormal basis of the approximation matrix
-    base_projection = q_substitute.T @ a_matrix
-
-    # compute the singular vector decomposition of the thinner matrix base projection
-    eigenvectors, eigenvalues, _ = np.linalg.svd(base_projection, full_matrices=False)
-
-    # compute the original eigenvectors
-    eigenvectors = np.dot(q_substitute, eigenvectors)
-
-    return eigenvalues, eigenvectors
-
-
-def facebook_randomized_svd(a_matrix: np.ndarray, randomized_rank: int) -> (np.ndarray, np.ndarray):
     eigenvectors, eigenvalues, _ = fbpca.pca(a_matrix, randomized_rank, True)
     return eigenvalues, eigenvectors
 
