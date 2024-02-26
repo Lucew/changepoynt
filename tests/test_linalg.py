@@ -59,7 +59,7 @@ class TestLinearAlgebra:
 
         # set a threshold for the amount of eigenvectors we want to have and compute them
         k = 3
-        k_eigvals, k_eigvecs = lg.randomized_singular_value_decomposition(self.A, 50)
+        k_eigvals, k_eigvecs = lg.facebook_randomized_svd(self.A, 50)
 
         # compare the values
         np.testing.assert_almost_equal(k_eigvals[:k], self.eigvals[:k])
