@@ -8,4 +8,4 @@ RUN pip install claspy numpy scipy matplotlib pandas streamlit fbpca numba stump
 # copy the app file into the container
 COPY . ./
 
-CMD streamlit run app.py
+CMD streamlit run ./frontend/app.py
