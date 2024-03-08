@@ -13,8 +13,6 @@ from changepoynt.algorithms.base_algorithm import Algorithm
 from changepoynt.visualization.score_plotting import plot_data_and_score
 
 import time
-import requests
-import os
 
 
 # make a global dict for the algorithms
@@ -94,9 +92,10 @@ def app():
         # Read the file contents into a Pandas dataframe
         df = pd.read_csv(uploaded_file)
 
-    # check make a selection for the columns we have available
+    # make a choice for the columns we have available
     column = st.sidebar.selectbox('Select CSV column with the signal in it', df.columns)
-    if not column: return
+    if not column:
+        return
 
     # check whether the column contains float values
     if not df[column].apply(lambda x: isinstance(x, float)).all():
@@ -151,7 +150,7 @@ def app():
         signal = df[column].values[::sampling]
 
         # compute the change point score result
-        figure, score= transform(transformer, signal)
+        figure, score = transform(transformer, signal)
 
         # enable the run button again
         placeholder.button('Run.', disabled=False, key=3)
@@ -165,7 +164,8 @@ def app():
         # plot the result onto the page
         st.pyplot(figure)
 
-        btn = st.download_button(
+        # enable the user to download the results
+        st.download_button(
             label="Download Score",
             data=create_score_download(signal, score),
             file_name=f"changepoint_score_{algorithm}_{column}.csv",
