@@ -5,7 +5,10 @@ LABEL authors="lucas"
 RUN pip install changepoynt --no-deps
 RUN pip install claspy numpy scipy matplotlib pandas streamlit fbpca numba stumpy
 
+# workraound according to: https://github.com/streamlit/streamlit/issues/4842
+WORKDIR /app
+
 # copy the app file into the container
 COPY . ./
-
-CMD streamlit run ./frontend/app.py
+RUN ls
+CMD streamlit run app.py
