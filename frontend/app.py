@@ -1,6 +1,5 @@
 import streamlit as st
-from streamlit import runtime
-from streamlit.runtime.scriptrunner import get_script_run_ctx
+
 
 import pandas as pd
 import numpy as np
@@ -34,23 +33,6 @@ def transform(transformer: Algorithm, signal: np.ndarray):
     return fig, score
 
 
-def get_remote_ip() -> str:
-    """Get remote ip."""
-
-    try:
-        ctx = get_script_run_ctx()
-        if ctx is None:
-            return ""
-
-        session_info = runtime.get_instance().get_client(ctx.session_id)
-        if session_info is None:
-            return ""
-    except Exception as e:
-        return ""
-
-    return session_info.request.remote_ip
-
-
 @st.cache_data
 def create_example():
 
@@ -73,29 +55,6 @@ def create_example():
     return df
 
 
-def telegram_bot_sendtext(bot_message):
-    bot_token = os.environ.get("BOT_TOKEN")
-    bot_chat_id = os.environ.get("CHAT_ID")
-    if bot_token is None or bot_chat_id is None:
-        st.error("Bot Token or Chat ID have not been set as environment variables.")
-        return
-    send_text = 'https://api.telegram.org/bot' + bot_token + '/sendMessage?chat_id=' + bot_chat_id \
-                + '&parse_mode=Markdown&text=' + bot_message
-
-    # send the request
-    try:
-        response = requests.get(send_text)
-    except requests.exceptions.ConnectionError:
-        return ""
-
-    # decode the request if we have one
-    try:
-        response = response.json()
-    except requests.exceptions.JSONDecodeError:
-        response = None
-    return response
-
-
 def create_score_download(signal: np.ndarray, score: np.ndarray):
 
     # pad the score with zeros
@@ -111,17 +70,6 @@ def create_score_download(signal: np.ndarray, score: np.ndarray):
 def app():
     # Set the app title
     st.title('Change Point Detection App.')
-
-    # get the ip of the user
-    ip = str(get_remote_ip())
-
-    # log the usage of our app
-    if ip not in st.session_state:
-        # send a telegram message
-        telegram_bot_sendtext(f"We have a new user in our streamlit app: {ip}")
-
-        # set the ip to usage
-        st.session_state[ip] = True
 
     # Add a file uploader component to the app
     st.write("Caution with Data uploading! The connection might not be encrypted and the server is not secure.")
