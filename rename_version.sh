@@ -23,4 +23,5 @@ if [ -f "$file" ]; then
     echo "Successfully appended '$1' to the version in $file"
 else
     echo "File pyproject.toml not found in the current directory."
+    exit 1
 fi
