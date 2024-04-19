@@ -1,6 +1,6 @@
 import numpy as np
 from changepoynt.algorithms.base_algorithm import Algorithm
-from claspy.segmentation import BinaryClaSPSegmentation
+# from claspy.segmentation import BinaryClaSPSegmentation
 
 
 class CLASP(Algorithm):
