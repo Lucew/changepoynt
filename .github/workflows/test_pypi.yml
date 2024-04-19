@@ -52,6 +52,14 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
+
+      # https://github.com/actions/checkout#fetch-only-a-single-file
+      # get only the test files for the test of the installed package
+      - name: Get the test scripts from the original repository
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            tests
       - name: Install dependencies
         # https://packaging.python.org/en/latest/guides/using-testpypi/
         run: |
