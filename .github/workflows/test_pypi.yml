@@ -13,6 +13,7 @@ jobs:
 
   # test the package before we deploy it anywhere
   test-package:
+    name: Run tests in local repository
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -22,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
@@ -34,7 +35,7 @@ jobs:
 
   # publish the package to test.pypi.org
   pypi-publish:
-    name: upload release to PyPI
+    name: Upload release to PyPI
     needs: test-package
     runs-on: ubuntu-latest
     # Specifying a GitHub environment is optional, but strongly encouraged
@@ -47,7 +48,7 @@ jobs:
       - name: Get the repository
         uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
       - name: Update the package Version for testing
         # https://stackoverflow.com/questions/54310050/how-to-version-build-artifacts-using-github-actions
         run: |
@@ -75,7 +76,7 @@ jobs:
 
     steps:
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
