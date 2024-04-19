@@ -1,0 +1,26 @@
+name: test-pypi-push
+
+on:
+  push:
+    paths:
+      - 'changepoynt/**'
+      - 'tests/**'
+      - '.github/**'
+  pull_request:
+
+jobs:
+  pypi-publish:
+    name: upload release to PyPI
+    runs-on: ubuntu-latest
+    # Specifying a GitHub environment is optional, but strongly encouraged
+    environment: release
+    permissions:
+      # IMPORTANT: this permission is mandatory for trusted publishing
+      id-token: write
+    steps:
+      # retrieve your distributions here
+      - uses: actions/checkout@v2
+      - name: Publish package distributions to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
