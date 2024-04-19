@@ -1,5 +1,6 @@
 name: test-pypi-push
-
+# https://packaging.python.org/en/latest/tutorials/packaging-projects/
+# https://docs.pypi.org/trusted-publishers/using-a-publisher/
 on:
   push:
     paths:
@@ -31,3 +32,24 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
+  pypi-download-test:
+    name: Install Package from PyPI
+    needs: pypi-publish
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
+        python-version: [ '3.9', '3.11' ]
+
+    steps:
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        # https://packaging.python.org/en/latest/guides/using-testpypi/
+        run: |
+          python3 -m pip install pytest
+          python3 -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ changepoynt
+      - name: Test with pytest
+        run: pytest
