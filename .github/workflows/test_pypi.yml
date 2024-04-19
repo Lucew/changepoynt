@@ -19,7 +19,14 @@ jobs:
       id-token: write
     steps:
       # retrieve your distributions here
-      - uses: actions/checkout@v2
+      - name: Get the repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v2
+      - name: Make the build steps for the packaging
+        run: |
+          python3 -m pip install --upgrade build
+          python3 -m build
       - name: Publish package distributions to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
