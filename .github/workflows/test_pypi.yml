@@ -5,7 +5,7 @@ on:
     paths:
       - 'changepoynt/**'
       - 'tests/**'
-      - '.github/**'
+      - '.github/workflows/test_pypi.yml'
   pull_request:
 
 jobs:
