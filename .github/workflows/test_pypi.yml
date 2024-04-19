@@ -27,9 +27,7 @@ jobs:
       - name: Update the package Version for testing
         # https://stackoverflow.com/questions/54310050/how-to-version-build-artifacts-using-github-actions
         run: |
-          cd changepoynt
           run rename_version.sh ${{ github.run_number }}
-          cd ..
       - name: Make the build steps for the packaging
         # https://stackoverflow.com/questions/21064581/how-to-overwrite-pypi-package-when-doing-upload-from-command-line
         # https://peps.python.org/pep-0427/#file-name-convention
