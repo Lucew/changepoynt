@@ -25,6 +25,10 @@ class CLASP(Algorithm):
                  distance="znormed_euclidean_distance", score="roc_auc",
                  early_stopping=True, validation="significance_test", threshold=1e-15, excl_radius=5,
                  random_state=2357) -> None:
+
+        # say that we currently not support CLASP due to old packages in the requirements
+        raise NotImplementedError('CLASP is currently not available, as it requires outdated package versions.')
+
         # save the specified parameters into instance variables
         self.n_segments = n_segments
         self.n_estimators = n_estimators

@@ -24,7 +24,8 @@ class TestSST:
         pass
 
     def test_default(self):
-        clasp.CLASP().transform(self.signal)
+        with pytest.raises(NotImplementedError):
+            clasp.CLASP().transform(self.signal)
 
 
 if __name__ == "__main__":
