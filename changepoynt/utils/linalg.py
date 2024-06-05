@@ -4,12 +4,12 @@ import numpy as np
 import numba as nb
 
 import scipy as sp
-from scipy.linalg import eigh_tridiagonal
-from scipy.sparse.linalg import svds, eigsh
+import scipy.linalg as splg
+import scipy.sparse.linalg
 import fbpca
 
 
-@nb.jit(nopython=True)
+# @nb.jit(nopython=True)
 def power_method(a_matrix: np.ndarray, x_vector: np.ndarray, n_iterations: int) -> (float, np.ndarray):
     """
     This function searches the largest (dominant) eigenvalue and corresponding eigenvector by repeated multiplication
@@ -27,11 +27,10 @@ def power_method(a_matrix: np.ndarray, x_vector: np.ndarray, n_iterations: int) 
     # go through the iterations and continue to scale the returned vector, so we do not reach extreme values
     # during the iteration we scale the vector by its maximum as we can than easily extract the eigenvalue
     # TODO: This only works for our symmetric correlation matrices but not for any arbitrary matrices
-    a_square = a_matrix.T @ a_matrix
     for _ in range(n_iterations):
         # multiplication with a_matrix.T @ a_matrix as can be seen in explanation of
         # https://numpy.org/doc/stable/reference/generated/numpy.linalg.svd.html
-        x_vector = a_square @ x_vector
+        x_vector = a_matrix @ x_vector
 
         # scale the vector so we keep the values in bound
         x_vector = x_vector / np.max(x_vector)
@@ -78,7 +77,7 @@ def lanczos(a_matrix: np.ndarray, r_0: np.ndarray, k: int) -> (np.ndarray, np.nd
         new_q = r_i / betas[j]
 
         # compute the new alpha
-        alphas[j + 1] = new_q.T @ a_matrix @ new_q
+        alphas[j + 1] = new_q.T @ (a_matrix @ new_q)
 
         # compute the new r
         r_i = a_matrix @ new_q - alphas[j + 1] * new_q - betas[j] * q_i
@@ -99,7 +98,7 @@ def tridiagonal_eigenvalues(alphas: np.ndarray, betas: np.ndarray, amount=-1):
 
     :param alphas: main diagonal elements
     :param betas: off diagonal elements
-    :param amount: The amount of eigenvalues you want to compute (from the highest)
+    :param amount: The number of eigenvalues you want to compute (from the highest)
     :return: eigenvalues and corresponding eigenvectors
     """
 
@@ -114,9 +113,8 @@ def tridiagonal_eigenvalues(alphas: np.ndarray, betas: np.ndarray, amount=-1):
     assert alphas.shape[0] - 1 == betas.shape[0], 'Alpha size needs to be exactly one bigger than beta size.'
 
     # compute the decomposition
-    eigenvalues, eigenvectors = eigh_tridiagonal(d=alphas, e=betas,
-                                                 select='i',
-                                                 select_range=(alphas.shape[0] - amount, alphas.shape[0] - 1))
+    eigenvalues, eigenvectors = splg.eigh_tridiagonal(d=alphas, e=betas, select='i',
+                                                      select_range=(alphas.shape[0] - amount, alphas.shape[0] - 1))
 
     # return them to be in sinking order
     return eigenvalues[::-1], eigenvectors[:, ::-1]
@@ -134,7 +132,7 @@ def rayleigh_ritz_singular_value_decomposition(a_matrix: np.ndarray, k: int) -> 
     :param k: the number of highest eigenvectors we want to find
     :return: returns the eigenvalues and eigenvectors as numpy arrays
     """
-    singular_vectors, singular_values, _ = svds(a_matrix, k=k)
+    singular_vectors, singular_values, _ = scipy.sparse.linalg.svds(a_matrix, k=k)
     return singular_values, singular_vectors
 
 
@@ -154,6 +152,52 @@ def facebook_randomized_svd(a_matrix: np.ndarray, randomized_rank: int) -> (np.n
     """
     singular_vectors, singular_values, _ = fbpca.pca(a_matrix, randomized_rank, True)
     return singular_values, singular_vectors
+
+
+def randomized_hankel_svd(hankel_matrix: np.ndarray, k: int, subspace_iteration_q: int = 2, oversampling_p: int = 2):
+    """
+    Function for the randomized singular vector decomposition using [1].
+    Implementation modified from: https://pypi.org/project/fbpca/
+    """
+
+    # get the parameter l from the paper
+    sample_length_l = k+oversampling_p
+    assert 1.25*sample_length_l < min(hankel_matrix.shape)
+
+    # Apply A to a random matrix, obtaining Q.
+    random_matrix_omega = np.random.uniform(low=-1, high=1, size=(hankel_matrix.shape[0], sample_length_l))
+    projection_matrix_q = hankel_matrix@random_matrix_omega
+
+    # Form a matrix Q whose columns constitute a well-conditioned basis for the columns of the earlier Q.
+    if subspace_iteration_q == 0:
+        (projection_matrix_q, _) = sp.linalg.qr(projection_matrix_q, mode='economic')
+    if subspace_iteration_q > 0:
+        (projection_matrix_q, _) = sp.linalg.lu(projection_matrix_q, permute_l=True)
+
+    # Conduct normalized power iterations.
+    for it in range(subspace_iteration_q):
+
+        # QA
+        projection_matrix_q = (projection_matrix_q.T @ hankel_matrix).T
+
+        (projection_matrix_q, _) = splg.lu(projection_matrix_q, permute_l=True)
+
+        # AAQ
+        projection_matrix_q = hankel_matrix @ projection_matrix_q
+
+        if it + 1 < subspace_iteration_q:
+            (projection_matrix_q, _) = splg.lu(projection_matrix_q, permute_l=True)
+        else:
+            (projection_matrix_q, _) = splg.qr(projection_matrix_q, mode='economic')
+
+    # SVD Q'*A to obtain approximations to the singular values and right singular vectors of A; adjust the left singular
+    # vectors of Q'*A to approximate the left singular vectors of A.
+    lower_space_hankel = projection_matrix_q.T @ hankel_matrix
+    (R, s, Va) = splg.svd(lower_space_hankel, full_matrices=False)
+    U = projection_matrix_q.dot(R)
+
+    # Retain only the leftmost k columns of U, the uppermost k rows of Va, and the first k entries of s.
+    return U[:, :k], s[:k], Va[:k, :]
 
 
 @nb.jit(nopython=True)
@@ -352,6 +396,7 @@ class HankelFFTRepresentation:
             self.window_length = window_length
             self.window_number = window_number
             self.lag = lag
+            self.shape = (window_length, window_number)
 
             # create the representation and save it into the class
             hankel_rfft, fft_len, _ = get_fast_hankel_representation(time_series, end_index,
@@ -460,6 +505,7 @@ class HankelCorrelationFFTRepresentation:
         self.window_number = hankel_matrix.window_number
         self.lag = hankel_matrix.lag
         self.hankel_matrix = hankel_matrix
+        self.shape = (self.window_length, self.window_length)
 
     def __matmul__(self, other_matrix: np.ndarray) -> np.ndarray:
         if isinstance(other_matrix, np.ndarray):
