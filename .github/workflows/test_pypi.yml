@@ -7,6 +7,7 @@ on:
       - 'changepoynt/**'
       - 'tests/**'
       - '.github/workflows/test_pypi.yml'
+      - 'pyproject.toml'
   pull_request:
 
 jobs:
