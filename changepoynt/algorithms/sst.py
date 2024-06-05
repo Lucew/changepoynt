@@ -46,17 +46,17 @@ class SST(Algorithm):
 
     def __init__(self, window_length: int, n_windows: int = None, lag: int = None, rank: int = 5, scale: bool = True,
                  method: str = 'ika', lanczos_rank: int = None, random_rank: int = None,
-                 feedback_noise_level: float = 1e-3, scoring_step: int = 1) -> None:
+                 feedback_noise_level: float = 1e-3, scoring_step: int = 1, use_fast_hankel: bool = False) -> None:
         """
         Initializing the Singular Spectrum Transformation (SST) requires setting a lot of parameters. See the parameters
         explanation for some intuition into the right choices. Currently, there are two SST methods from [1] and [2]
         available for use.
 
         :param window_length: This specifies the length of the time series (in samples), which will be used to extract
-        the representative "eigensignals" to be compared before and after the lag. The windows length should be big
-        enough to cover any wanted patterns (e.g. bigger than the periodicity of periodic signals).
+        the representative "eigensignals" to be compared before and after the lag. The window length should be big
+        enough to cover any wanted patterns (e.g., bigger than the periodicity of periodic signals).
 
-        :param n_windows: This specifies the amount of consecutive time windows used to extract the "eigensignals" from
+        :param n_windows: This specifies the number of consecutive time windows used to extract the "eigensignals" from
         the given time series. It should be big enough to cover different parts of the target behavior. If one does not
         specify this value, we use the rule of thumb and take as many time windows as you specified the length of the
         window (rule of thumb).
@@ -67,20 +67,20 @@ class SST(Algorithm):
         cover the behavior.
 
         :param rank: This parameter specifies the amount of "eigensignals" which will be used to measure the
-        dissimilarity of the signal in the future behavior. As a rule of thumb we take the five most dominant
-        "eigensignals" if you do no specify otherwise.
+        dissimilarity of the signal in the future behavior. As a rule of thumb, we take the five most dominant
+        "eigensignals" if you do not specify otherwise.
 
-        :param scale: Due to numeric stability we REALLY RECOMMEND scaling the signal into a restricted value range. Per
-        default, we use a min max scaling to ensure a restricted value range. In the presence of extreme outliers this
-        could cause problems, as the signal will be squished.
+        :param scale: Due to numeric stability, we REALLY RECOMMEND scaling the signal into a restricted value range.
+        Per default, we use a min max scaling to ensure a restricted value range. In the presence of extreme outliers,
+        this could cause problems, as the signal will be squished.
 
-        :param method: Currently "svd" [1], "ika" [2] and "rsvd" are available. ika corresponds to IKA-SST in [2] which
+        :param method: Currently, "svd" [1], "ika" [2] and "rsvd" are available. ika corresponds to IKA-SST in [2] which
         will speed up the computation significantly.
 
-        :param lanczos_rank: In order to use the implicit approximation of "eigensignals" by using "ika" [2] method
-        one needs to decide the rank of the implicit approximation of each "eigensignal". As a rule of thumb we
-        determine this value as beeing twice the amount of specified "eigensignals" to span the subspace
-        (parameter rank). This is also recommend by the author of IKA-SST in [2].
+        :param lanczos_rank: In order to use the implicit approximation of "eigensignals" by using "ika" [2] method,
+        one needs to decide the rank of the implicit approximation of each "eigensignal". As a rule of thumb, we
+        determine this value as being twice the amount of specified "eigensignals" to span the subspace
+        (parameter rank). This is also recommended by the author of IKA-SST in [2].
 
         :param random_rank: In order to use the randomized singular value decomposition, one needs to provide a
         randomized rank (size of second matrix dimension for the randomized matrix) as specified in [3]. The lower
@@ -92,7 +92,7 @@ class SST(Algorithm):
         plus the noise level specified here. The noise level should just be a small fraction of the value range
         of the signal.
 
-        :param scoring_step: the distance between scoring steps in samples (e.g. 2 would half the computation).
+        :param scoring_step: the distance between scoring steps in samples (e.g., 2 would half the computation).
         """
 
         # save the specified parameters into instance variables
@@ -106,6 +106,7 @@ class SST(Algorithm):
         self.random_rank = random_rank
         self.noise = feedback_noise_level
         self.scoring_step = scoring_step
+        self.use_fast_hankel = use_fast_hankel
 
         # set some default values when they have not been specified
         if self.n_windows is None:
@@ -129,15 +130,26 @@ class SST(Algorithm):
         self.methods = {'ika': partial(_implicit_krylov_approximation,
                                        rank=self.rank,
                                        lanczos_rank=self.lanczos_rank),
-                        'fft-ika': partial(_implicit_krylov_approximation,
-                                           rank=self.rank,
-                                           lanczos_rank=self.lanczos_rank),
                         'svd': partial(_rayleigh_singular_value_decomposition,
                                        rank=self.rank),
-                        'rsvd': partial(_facebook_random_singular_value_decomposition,
+                        'rsvd': partial(_random_singular_value_decomposition,
                                         rank=self.rank,
-                                        randomized_rank=self.random_rank)
+                                        randomized_rank=self.random_rank),
+                        'fbrsvd': partial(_facebook_random_singular_value_decomposition,
+                                          rank=self.rank,
+                                          randomized_rank=self.random_rank)
                         }
+        if self.method not in self.methods:
+            raise ValueError(f'Method {self.method} not defined. Possible methods: {list(self.methods.keys())}.')
+
+        # set up the methods we use for the construction of the hankel matrix (either it is the fft representation
+        # of the other one)
+        if use_fast_hankel and (self.method == 'svd' or self.method == 'fbrsvd'):
+            raise ValueError(f'SVD method is not defined with use_fast_hankel=True')
+        self.hankel_construction = {
+            False: lg.compile_hankel,
+            True: lg.HankelFFTRepresentation
+        }
 
         # check whether the method is correct
         assert self.method in self.methods, f'Specified method {self.method} is not available in {self.methods.keys()}.'
@@ -171,16 +183,17 @@ class SST(Algorithm):
 
         # get the changepoint scorer from the different methods
         scoring_function = self.methods[self.method]
+        hankel_function = self.hankel_construction[self.use_fast_hankel]
 
         # start the scaling itself by calling the jit compiled staticmethod and return the result
         score = _transform(time_series=time_series, start_idx=starting_point, window_length=self.window_length,
                            n_windows=self.n_windows, lag=self.lag, scoring_step=self.scoring_step,
-                           scoring_function=scoring_function)
+                           scoring_function=scoring_function, hankel_construction_function=hankel_function)
         return score
 
 
 def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_windows: int, lag: int, scoring_step: int,
-               scoring_function: Callable) -> np.ndarray:
+               scoring_function: Callable, hankel_construction_function: Callable) -> np.ndarray:
     """
     Compute heavy and hopefully jit compilable score computation for the SST method. It does not do any parameter
     checking and can throw cryptic errors. It's only used for internal use as a private function.
@@ -196,7 +209,7 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
 
     # create initial vector for ika method with feedback dominant eigenvector as proposed in [2]
     # with a norm of one
-    x0 = np.random.rand(n_windows)
+    x0 = np.random.rand(n_windows)[:, None]
     x0 /= np.linalg.norm(x0)
 
     # initialize a scoring array with no values yet
@@ -208,17 +221,17 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
     # iterate over all the values in the signal starting at start_idx computing the change point score
     for idx in range(start_idx, time_series.shape[0], scoring_step):
         # compile the past hankel matrix (H1)
-        hankel_past = lg.compile_hankel(time_series, idx - lag, window_length, n_windows)
+        hankel_past = hankel_construction_function(time_series, idx - lag, window_length, n_windows)
 
         # compile the future hankel matrix (H2)
-        hankel_future = lg.compile_hankel(time_series, idx, window_length, n_windows)
+        hankel_future = hankel_construction_function(time_series, idx, window_length, n_windows)
 
         # compute the score and save the returned feedback vector
         score[idx - offset - scoring_step // 2:idx - offset + (scoring_step + 1) // 2], x1 = \
             scoring_function(hankel_past, hankel_future, x0)
 
         # add noise to the dominant eigenvector and normalize it again
-        x0 = x1 + 1e-3 * np.random.rand(x0.size)
+        x0 = x1 + 1e-3 * np.random.rand(x0.shape[0])[:, None]
         x0 /= np.linalg.norm(x0)
 
     return score
@@ -234,7 +247,7 @@ def _implicit_krylov_approximation(hankel_past: np.ndarray, hankel_future: np.nd
     Proceedings of the 2007 SIAM International Conference on Data Mining.
     Society for Industrial and Applied Mathematics, 2007.
 
-    Due to perfomance reasons this function makes no sanity checks for matrix size and parameter validity.
+    Due to performance reasons, this function makes no sanity checks for matrix size and parameter validity.
 
     :param hankel_past: the hankel matrix H1 before the change point
     :param hankel_future: the hankel matrix H2 after the change point
@@ -335,7 +348,51 @@ def _facebook_random_singular_value_decomposition(hankel_past: np.ndarray, hanke
     return 1 - alpha.T @ alpha, eigvec_future
 
 
-if __name__ == '__main__':
+def _random_singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
+                                         rank: int, randomized_rank: int):
+    """
+    This function implements the idea of
+
+    Idé, Tsuyoshi, and Keisuke Inoue.
+    "Knowledge discovery from heterogeneous dynamic systems using change-point correlations."
+    Proceedings of the 2005 SIAM international conference on data mining.
+    Society for Industrial and Applied Mathematics, 2005.
+
+    but uses the randomized svd decomposition by
+
+    Halko, Nathan, Per-Gunnar Martinsson, and Joel A. Tropp.
+    "Finding structure with randomness: Probabilistic algorithms for constructing approximate matrix decompositions."
+    SIAM review 53.2 (2011): 217-288.
+
+    and uses a feedback vector for the future dominant eigenvector as proposed in
+
+    Idé, Tsuyoshi, and Koji Tsuda.
+    "Change-point detection using krylov subspace learning."
+    Proceedings of the 2007 SIAM International Conference on Data Mining.
+    Society for Industrial and Applied Mathematics, 2007.
+
+    :param hankel_past: the hankel matrix H1 before the change point
+    :param hankel_future: the hankel matrix H2 after the change point
+    :param x0: the initialization value for the power method applied to H2 to find the dominant eigenvector
+    :param rank: the amount of (approximated) eigenvectors as subspace of H1
+    :param randomized_rank: the rank of the approximation used to construct the noise matrix
+    :return: the change point score, the new dominant eigenvector of H2 for the feedback into the next H2
+    """
+    # compute the biggest eigenvector of the hankel matrix after the possible change point (h2)
+    c_2 = hankel_future @ hankel_future.T
+    _, eigvec_future = lg.power_method(c_2, x0, n_iterations=1)
+
+    # compute the eigenvectors of the past hankel matrix
+    singvecs_past, _, _ = lg.randomized_hankel_svd(hankel_past, rank, oversampling_p=randomized_rank-rank)
+
+    # compute the change point score as defined in the papers
+    alpha = singvecs_past[:, :rank].T @ eigvec_future
+    return 1 - alpha.T @ alpha, eigvec_future
+
+
+
+def main():
+    """This function is not intended for users, but for quick testing during development."""
     from time import time
 
     # make synthetic step function
@@ -347,13 +404,19 @@ if __name__ == '__main__':
     x += np.random.rand(x.size)
 
     # create the sst method
-    ika_sst = SST(31, method='ika')
+    ika_sst = SST(31, method='ika', use_fast_hankel=True)
     svd_sst = SST(31, method='svd')
-    rsvd_sst = SST(31, method='rsvd')
+    rsvd_sst = SST(31, method='rsvd', use_fast_hankel=True)
+    fbrsvd_sst = SST(31, method='fbrsvd')
 
     # make the scoring
     start = time()
     ika_sst.transform(x)
-    print((time() - start) / (length * 3))
+    # print((time() - start) / (length * 3))
     svd_sst.transform(x)
     rsvd_sst.transform(x)
+    fbrsvd_sst.transform(x)
+
+
+if __name__ == '__main__':
+    main()
