@@ -50,7 +50,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.11'
       - name: Update the package Version for testing
         # https://stackoverflow.com/questions/54310050/how-to-version-build-artifacts-using-github-actions
         run: |
