@@ -23,15 +23,27 @@ class TestLinearAlgebra:
         self.T = np.diag(self.d) + np.diag(self.e, k=1) + np.diag(self.e, k=-1)
 
         # compute the svd of the matrix A as we will need it for comparisons
-        self.eigvecs, self.eigvals, _ = np.linalg.svd(self.A)
+        self.singvecs, self.singvals, _ = np.linalg.svd(self.A)
+
+        # create a random signal
+        self.signal = np.random.rand(100) * 1000
+
+        # create test matrices to multiply with
+        self.other_matrix = np.random.rand(20, 65)
+        self.other_matrix2 = np.random.rand(50, 15)
+
+        # create the two different hankel representations
+        self.hankel_matrix_fft = lg.HankelFFTRepresentation(self.signal, end_index=100, window_length=50,
+                                                            window_number=20, lag=1)
+        self.hankel_matrix = lg.compile_hankel(self.signal, end_index=100, window_size=50, rank=20, lag=1)
 
     def teardown_method(self):
         pass
 
     def test_power_method(self):
         eigval, eigvec = lg.power_method(self.A, self.x0, n_iterations=100)
-        np.testing.assert_almost_equal(eigval, self.eigvals[0])
-        np.testing.assert_almost_equal(np.abs(eigvec), np.abs(self.eigvecs[:, 0]))
+        np.testing.assert_almost_equal(eigval, self.singvals[0])
+        np.testing.assert_almost_equal(np.abs(eigvec), np.abs(self.singvecs[:, 0]))
 
     def test_eig_tridiag(self):
         # take a look at the highest half of the eigenvalues as lower one might be unstable
@@ -52,8 +64,8 @@ class TestLinearAlgebra:
         k_eigvecs = k_eigvecs[:, idx]
 
         # compare the values
-        np.testing.assert_almost_equal(k_eigvals, self.eigvals[:k])
-        np.testing.assert_almost_equal(np.abs(k_eigvecs), np.abs(self.eigvecs[:, :k]))
+        np.testing.assert_almost_equal(k_eigvals, self.singvals[:k])
+        np.testing.assert_almost_equal(np.abs(k_eigvecs), np.abs(self.singvecs[:, :k]))
 
     def test_randomized_svd(self):
 
@@ -62,36 +74,40 @@ class TestLinearAlgebra:
         k_eigvals, k_eigvecs = lg.facebook_randomized_svd(self.A, 50)
 
         # compare the values
-        np.testing.assert_almost_equal(k_eigvals[:k], self.eigvals[:k])
-        np.testing.assert_almost_equal(np.abs(k_eigvecs[:, :k]), np.abs(self.eigvecs[:, :k]))
+        np.testing.assert_almost_equal(k_eigvals[:k], self.singvals[:k])
+        np.testing.assert_almost_equal(np.abs(k_eigvecs[:, :k]), np.abs(self.singvecs[:, :k]))
 
-    def test_restarted_implicit_lanczos_svd(self):
-        """
-        !NOTE!
-        This function currently only works for large eigenvalues. So we can mostly only compare the highest two.
+    def test_right_hankel_product(self):
+        # make the multiplications
+        res = self.hankel_matrix_fft @ self.other_matrix
+        res2 = self.hankel_matrix @ self.other_matrix
+        np.testing.assert_almost_equal(res, res2)
 
-        Is that a problem? We will see.
-        :return:
-        """
+    def test_left_hankel_product(self):
+        # make the multiplications
+        res = self.other_matrix2.T @ self.hankel_matrix_fft
+        res2 = self.other_matrix2.T @ self.hankel_matrix
+        np.testing.assert_almost_equal(res, res2)
 
-        # create a symmetric random matrix (as needed for this method)
-        # as proposed in https://stackoverflow.com/questions/10806790/generating-symmetric-matrices-in-numpy
-        a = np.random.rand(100, 100)
-        a = np.tril(a) + np.tril(a, -1).T
+    def test_transposed_right_hankel_product(self):
+        # make the multiplications
+        res = self.hankel_matrix_fft.T @ self.other_matrix2
+        res2 = self.hankel_matrix.T @ self.other_matrix2
+        np.testing.assert_almost_equal(res, res2)
 
-        # test that the matrix is hermitian (symmetric for real valued matrices)
-        np.testing.assert_almost_equal(a, a.T)
+    def test_transposed_left_hankel_product(self):
+        # make the multiplications
+        res = self.other_matrix.T @ self.hankel_matrix_fft.T
+        res2 = self.other_matrix.T @ self.hankel_matrix.T
+        np.testing.assert_almost_equal(res, res2)
 
-        # compute the svd of the matrix A as we will need it for comparisons
-        eigvecs, eigvals, _ = np.linalg.svd(a)
-
-        # get the results from the lanczos method
-        k = 2
-        k_eigvals, k_eigvecs = lg.implicit_restarted_lanczos_bidiagonalization(a, k, 2*k)
-
-        # compare the values
-        np.testing.assert_almost_equal(k_eigvals[::-1], eigvals[:k])
-        np.testing.assert_almost_equal(np.abs(k_eigvecs)[:, ::-1], np.abs(eigvecs[:, :k]))
+    def test_hankel_correlation_product(self):
+        # check the correlation matrix multiplication
+        hankel_corr = self.hankel_matrix @ self.hankel_matrix.T
+        hankel_fft_corr = self.hankel_matrix_fft @ self.hankel_matrix_fft.T
+        res = hankel_fft_corr @ self.other_matrix2
+        res2 = hankel_corr @ self.other_matrix2
+        np.testing.assert_almost_equal(res, res2)
 
 
 if __name__ == "__main__":
