@@ -112,7 +112,7 @@ class SST(Algorithm):
             self.n_windows = self.window_length
         if self.lag is None:
             # rule of thumb
-            self.lag = max(self.n_windows//3, 1)
+            self.lag = max(self.n_windows // 3, 1)
         if self.lanczos_rank is None:
             # make rank even and multiply by two just as specified in [2]
             self.lanczos_rank = self.rank * 2 - (self.rank & 1)
@@ -129,11 +129,14 @@ class SST(Algorithm):
         self.methods = {'ika': partial(_implicit_krylov_approximation,
                                        rank=self.rank,
                                        lanczos_rank=self.lanczos_rank),
+                        'fft-ika': partial(_implicit_krylov_approximation,
+                                           rank=self.rank,
+                                           lanczos_rank=self.lanczos_rank),
                         'svd': partial(_rayleigh_singular_value_decomposition,
                                        rank=self.rank),
                         'rsvd': partial(_facebook_random_singular_value_decomposition,
-                                          rank=self.rank,
-                                          randomized_rank=self.random_rank)
+                                        rank=self.rank,
+                                        randomized_rank=self.random_rank)
                         }
 
         # check whether the method is correct
@@ -141,9 +144,9 @@ class SST(Algorithm):
 
     def transform(self, time_series: np.ndarray) -> np.ndarray:
         """
-        This function calculate the anomaly score for each sample within the time series starting from an initial sample
-        being the first sample of fitting the past hankel matrix (window_length + n_windows samples) and the new future
-        hankel matrix (+lag). Values before that will be zero
+        This function calculates the anomaly score for each sample within the time series, starting from an initial
+        sample being the first sample of fitting the past hankel matrix (window_length + n_windows samples) and the new
+        future hankel matrix (+lag). Values before that will be zero
 
         It also does some assertions regarding the specified parameters and whether they fit the time series.
 
@@ -185,7 +188,7 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
     :param time_series: 1D array containing the time series to be scored
     :param start_idx: integer defining the start sample index for the score computation
     :param window_length: the size of the time series window for each column of the hankel matrix
-    :param n_windows: amount of columns in the hankel matrix
+    :param n_windows: number of columns in the hankel matrix
     :param lag: sample distance between future and past hankel matrix
     :param scoring_step: the distance between scoring steps in samples.
     :param scoring_function: the function that is called every step to assess a scalar change point score
@@ -200,19 +203,18 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
     score = np.zeros_like(time_series)
 
     # make an offset for the data construction
-    offset = n_windows//2+lag
+    offset = n_windows // 2 + lag
 
     # iterate over all the values in the signal starting at start_idx computing the change point score
     for idx in range(start_idx, time_series.shape[0], scoring_step):
-
         # compile the past hankel matrix (H1)
-        hankel_past = lg.compile_hankel(time_series, idx-lag, window_length, n_windows)
+        hankel_past = lg.compile_hankel(time_series, idx - lag, window_length, n_windows)
 
         # compile the future hankel matrix (H2)
         hankel_future = lg.compile_hankel(time_series, idx, window_length, n_windows)
 
         # compute the score and save the returned feedback vector
-        score[idx-offset-scoring_step//2:idx-offset+(scoring_step+1)//2], x1 = \
+        score[idx - offset - scoring_step // 2:idx - offset + (scoring_step + 1) // 2], x1 = \
             scoring_function(hankel_past, hankel_future, x0)
 
         # add noise to the dominant eigenvector and normalize it again
@@ -232,22 +234,22 @@ def _implicit_krylov_approximation(hankel_past: np.ndarray, hankel_future: np.nd
     Proceedings of the 2007 SIAM International Conference on Data Mining.
     Society for Industrial and Applied Mathematics, 2007.
 
-    Due to perfomance reason this function makes no sanity checks for matrix size and parameter validity.
+    Due to perfomance reasons this function makes no sanity checks for matrix size and parameter validity.
 
     :param hankel_past: the hankel matrix H1 before the change point
     :param hankel_future: the hankel matrix H2 after the change point
     :param x0: the initialization value for the power method applied to H2 to find the dominant eigenvector
-    :param rank: the amount of (approximated) eigenvectors as subspace of H1
+    :param rank: the number of (approximated) eigenvectors as subspace of H1
     :param lanczos_rank: the rank of the approximation of the "eigensignals"
     :return: the change point score, the new dominant eigenvector of H2 for the feedback into the next H2
     """
 
     # compute the biggest eigenvector of the hankel matrix after the possible change point (h2)
-    c_2 = hankel_future.T @ hankel_future
+    c_2 = hankel_future @ hankel_future.T
     _, eigvec_future = lg.power_method(c_2, x0, n_iterations=1)
 
     # compute the empirical covariance matrix before the possible change point (H1)
-    c_1 = hankel_past.T @ hankel_past
+    c_1 = hankel_past @ hankel_past.T
 
     # compute the tridiagonal matrix from c1
     alphas, betas = lg.lanczos(c_1, eigvec_future, lanczos_rank)
@@ -273,58 +275,22 @@ def _rayleigh_singular_value_decomposition(hankel_past: np.ndarray, hankel_futur
 
     :param hankel_past: the hankel matrix H1 before the change point
     :param hankel_future: the hankel matrix H2 after the change point
-    :param x0: highest eigenvector of previous iteration (will be ignored in this function and is just added to complete
-    the function signature, i.e. input and output size, to be compatible with other methods)
-    :param rank: the amount of (approximated) eigenvectors as subspace of H1
+    :param x0: the highest eigenvector of previous iteration (will be ignored in this function and is just added to
+    complete the function signature, i.e. input and output size, to be compatible with other methods)
+    :param rank: the number of (approximated) eigenvectors as subspace of H1
     :return: the change point score, the input vector x0
     """
 
     # compute the rank highest eigenvectors of the past hankel matrix
-    c_1 = hankel_past.T @ hankel_past
-    _, eigvecs_past = lg.rayleigh_ritz_singular_value_decomposition(c_1, rank)
+    _, singvecs_past = lg.rayleigh_ritz_singular_value_decomposition(hankel_past, rank)
 
     # compute the dominant eigenvector of the future time series
-    c_2 = hankel_future.T @ hankel_future
+    c_2 = hankel_future @ hankel_future.T
     _, eigvec_future = lg.power_method(c_2, x0, n_iterations=1)
 
     # compute the projection distance
-    alpha = eigvecs_past.T @ eigvec_future
+    alpha = singvecs_past.T @ eigvec_future
     return 1 - alpha.sum(), eigvec_future
-
-
-def _lanczos_singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
-                                          rank: int, lanczos_rank: int) -> (float, np.ndarray):
-    """
-    This function implements change point detection using restarted implicit lanczos singular value decomposition
-    and computes the change point score as proposed in:
-
-    Idé, Tsuyoshi, and Keisuke Inoue.
-    "Knowledge discovery from heterogeneous dynamic systems using change-point correlations."
-    Proceedings of the 2005 SIAM international conference on data mining.
-    Society for Industrial and Applied Mathematics, 2005.
-
-    !NOTE!
-    Does currently not converge and therefore is not in use.
-
-    :param hankel_past: the hankel matrix H1 before the change point
-    :param hankel_future: the hankel matrix H2 after the change point
-    :param x0: highest eigenvector of previous iteration (will be ignored in this function and is just added to complete
-    the function signature, i.e. input and output size, to be compatible with other methods)
-    :param rank: the amount of (approximated) eigenvectors as subspace of H1
-    :param lanczos_rank: the rank of the approximation of the "eigensignals"
-    :return: the change point score, the input vector x0
-    """
-
-    # compute the rank highest eigenvectors of the past hankel matrix
-    _, eigvecs_past = lg.implicit_restarted_lanczos_bidiagonalization(hankel_past, rank, lanczos_rank=lanczos_rank)
-
-    # compute the dominant eigenvector of the future time series
-    c_2 = hankel_future.T @ hankel_future
-    _, eigvec_future = lg.power_method(c_2, x0, n_iterations=1)
-
-    # compute the projection distance
-    alpha = eigvecs_past.T @ eigvec_future
-    return 1 - alpha.T @ alpha, eigvec_future
 
 
 def _facebook_random_singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
@@ -358,20 +324,20 @@ def _facebook_random_singular_value_decomposition(hankel_past: np.ndarray, hanke
     :return: the change point score, the new dominant eigenvector of H2 for the feedback into the next H2
     """
     # compute the biggest eigenvector of the hankel matrix after the possible change point (h2)
-    c_2 = hankel_future.T @ hankel_future
+    c_2 = hankel_future @ hankel_future.T
     _, eigvec_future = lg.power_method(c_2, x0, n_iterations=1)
 
     # compute the eigenvectors of the past hankel matrix
-    c_1 = hankel_past.T @ hankel_past
-    _, eigenvecs_past = lg.facebook_randomized_svd(c_1, randomized_rank=randomized_rank)
+    _, singvecs_past = lg.facebook_randomized_svd(hankel_past, randomized_rank=randomized_rank)
 
     # compute the change point score as defined in the papers
-    alpha = eigenvecs_past[:, :rank].T @ eigvec_future
-    return 1-alpha.T @ alpha, eigvec_future
+    alpha = singvecs_past[:, :rank].T @ eigvec_future
+    return 1 - alpha.T @ alpha, eigvec_future
 
 
 if __name__ == '__main__':
     from time import time
+
     # make synthetic step function
     np.random.seed(123)
     length = 300
