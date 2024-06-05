@@ -41,9 +41,18 @@ class TestLinearAlgebra:
         pass
 
     def test_power_method(self):
-        eigval, eigvec = lg.power_method(self.A, self.x0, n_iterations=100)
-        np.testing.assert_almost_equal(eigval, self.singvals[0])
-        np.testing.assert_almost_equal(np.abs(eigvec), np.abs(self.singvecs[:, 0]))
+        # make the correlation matrix
+        a_corr = self.A @ self.A.T
+        eigval, eigvec = lg.power_method(a_corr, self.x0, n_iterations=100)
+
+        # get the eigenvector
+        eigvals, eigvecs = np.linalg.eig(a_corr)
+        idces = np.argsort(eigvals)[::-1]
+        eigvals = eigvals[idces]
+        eigvecs = eigvecs[:, idces]
+
+        np.testing.assert_almost_equal(eigval, eigvals[0])
+        np.testing.assert_almost_equal(np.abs(eigvec), np.abs(eigvecs[:, 0]))
 
     def test_eig_tridiag(self):
         # take a look at the highest half of the eigenvalues as lower one might be unstable
