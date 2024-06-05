@@ -96,3 +96,31 @@ jobs:
           python3 -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ changepoynt
       - name: Test with pytest
         run: pytest
+
+  # publish the package once all tests are run and the commit contains a keyword
+  pypi-publish-finished-version:
+    name: Upload release to PyPI
+    needs: pypi-download-test
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, '(publish attempt)')
+    # Specifying a GitHub environment is optional, but strongly encouraged
+    environment: release
+    permissions:
+      # IMPORTANT: this permission is mandatory for trusted publishing
+      id-token: write
+    steps:
+      # retrieve your distributions here
+      - name: Get the repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Make the build steps for the packaging
+        # https://stackoverflow.com/questions/21064581/how-to-overwrite-pypi-package-when-doing-upload-from-command-line
+        # https://peps.python.org/pep-0427/#file-name-convention
+        run: |
+          python3 -m pip install --upgrade build
+          python3 -m build
+      - name: Publish package distributions to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
