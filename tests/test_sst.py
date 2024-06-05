@@ -2,8 +2,6 @@ import pytest
 import numpy as np
 import changepoynt.algorithms.sst as ssts
 import logging
-logging.basicConfig(level=logging.DEBUG)
-LOGGER = logging.getLogger(__name__)
 
 
 class TestSST:
@@ -32,15 +30,41 @@ class TestSST:
 
         # go through the methods and check execution
         for method in methods:
-            LOGGER.info(f'Starting SST for method {method}')
-            ssts.SST(min(5, self.signal_length//2), rank=2,
-                                                method=method).transform(self.signal)
+            ssts.SST(50, rank=2, method=method).transform(self.signal)
+
+    def test_svd_method(self):
+
+        # initialize the scorer
+        sst = ssts.SST(50, method="svd")
+        sst.transform(self.signal)
+
+    def test_fbrsvd_method(self):
+
+        # initialize the scorer
+        sst = ssts.SST(50, method="fbrsvd")
+        sst.transform(self.signal)
+
+    def test_rsvd_method(self):
+
+        # initialize the scorer
+        sst = ssts.SST(50, method="rsvd")
+        res = sst.transform(self.signal)
+        sst = ssts.SST(50, method="rsvd", use_fast_hankel=True)
+        res2 = sst.transform(self.signal)
+
+    def test_ika_method(self):
+
+        # initialize the scorer
+        sst = ssts.SST(50, method="ika")
+        res = sst.transform(self.signal)
+        sst = ssts.SST(50, method="ika", use_fast_hankel=True)
+        res2 = sst.transform(self.signal)
 
     def test_default(self):
         ssts.SST(min(5, self.signal_length//2), rank=2).transform(self.signal)
 
     def test_unknown_method(self):
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             ssts.SST(10, method='asdafwegrhqh')
 
 
