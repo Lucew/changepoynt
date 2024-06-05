@@ -26,6 +26,7 @@ def power_method(a_matrix: np.ndarray, x_vector: np.ndarray, n_iterations: int) 
 
     # go through the iterations and continue to scale the returned vector, so we do not reach extreme values
     # during the iteration we scale the vector by its maximum as we can than easily extract the eigenvalue
+    # TODO: This only works for our symmetric correlation matrices but not for any arbitrary matrices
     a_square = a_matrix.T @ a_matrix
     for _ in range(n_iterations):
         # multiplication with a_matrix.T @ a_matrix as can be seen in explanation of
