@@ -1,14 +1,15 @@
 # this file contains utility functions for handling and computing matrices needed for some of the algorithms in this
 # package
 import numpy as np
-from numba import jit
+import numba as nb
+
+import scipy as sp
 from scipy.linalg import eigh_tridiagonal
 from scipy.sparse.linalg import svds, eigsh
 import fbpca
-import warnings
 
 
-@jit(nopython=True)
+@nb.jit(nopython=True)
 def power_method(a_matrix: np.ndarray, x_vector: np.ndarray, n_iterations: int) -> (float, np.ndarray):
     """
     This function searches the largest (dominant) eigenvalue and corresponding eigenvector by repeated multiplication
@@ -27,7 +28,6 @@ def power_method(a_matrix: np.ndarray, x_vector: np.ndarray, n_iterations: int) 
     # during the iteration we scale the vector by its maximum as we can than easily extract the eigenvalue
     a_square = a_matrix.T @ a_matrix
     for _ in range(n_iterations):
-
         # multiplication with a_matrix.T @ a_matrix as can be seen in explanation of
         # https://numpy.org/doc/stable/reference/generated/numpy.linalg.svd.html
         x_vector = a_square @ x_vector
@@ -40,7 +40,7 @@ def power_method(a_matrix: np.ndarray, x_vector: np.ndarray, n_iterations: int) 
 
     # get the corresponding eigenvalue
     eigenvalue = np.linalg.norm(a_matrix @ x_vector)
-    return eigenvalue, (a_matrix @ x_vector)/eigenvalue
+    return eigenvalue, (a_matrix @ x_vector) / eigenvalue
 
 
 # @jit(nopython=True)
@@ -106,7 +106,7 @@ def tridiagonal_eigenvalues(alphas: np.ndarray, betas: np.ndarray, amount=-1):
     if amount < 0:
         amount = alphas.shape[0]
 
-    # assertions about shape and dimensions as well as amount of eigenvectors
+    # assertions about shape and dimensions as well as number of eigenvectors
     assert 0 < amount <= alphas.shape[0], 'We can only calculate one to size of matrix eigenvalues.'
     assert alphas.ndim == 1, 'The alphas need to be vectors.'
     assert betas.ndim == 1, 'The betas need to be vectors.'
@@ -114,7 +114,8 @@ def tridiagonal_eigenvalues(alphas: np.ndarray, betas: np.ndarray, amount=-1):
 
     # compute the decomposition
     eigenvalues, eigenvectors = eigh_tridiagonal(d=alphas, e=betas,
-                                                 select='i', select_range=(alphas.shape[0]-amount, alphas.shape[0]-1))
+                                                 select='i',
+                                                 select_range=(alphas.shape[0] - amount, alphas.shape[0] - 1))
 
     # return them to be in sinking order
     return eigenvalues[::-1], eigenvectors[:, ::-1]
@@ -129,11 +130,11 @@ def rayleigh_ritz_singular_value_decomposition(a_matrix: np.ndarray, k: int) -> 
     The order of the k highest eigenvalues is not guaranteed by this method!
 
     :param a_matrix: 2D-Matrix filled with floats for which we want to find the left eigenvectors
-    :param k: the amount of highest eigenvectors we want to find
+    :param k: the number of highest eigenvectors we want to find
     :return: returns the eigenvalues and eigenvectors as numpy arrays
     """
-    eigenvectors, eigenvalues, _ = svds(a_matrix, k=k)
-    return eigenvalues, eigenvectors
+    singular_vectors, singular_values, _ = svds(a_matrix, k=k)
+    return singular_values, singular_vectors
 
 
 def facebook_randomized_svd(a_matrix: np.ndarray, randomized_rank: int) -> (np.ndarray, np.ndarray):
@@ -143,7 +144,6 @@ def facebook_randomized_svd(a_matrix: np.ndarray, randomized_rank: int) -> (np.n
     Halko, Nathan, Per-Gunnar Martinsson, and Joel A. Tropp.
     "Finding structure with randomness: Probabilistic algorithms for constructing approximate matrix decompositions."
     SIAM review 53.2 (2011): 217-288.
-
     on page 4 chapter 1.3 and further.
 
     :param a_matrix: 2D-Matrix filled with floats for which we want to find the left eigenvectors
@@ -151,73 +151,11 @@ def facebook_randomized_svd(a_matrix: np.ndarray, randomized_rank: int) -> (np.n
     approximation but the lower the precision of the eigenvectors
     :return:
     """
-    eigenvectors, eigenvalues, _ = fbpca.pca(a_matrix, randomized_rank, True)
-    return eigenvalues, eigenvectors
+    singular_vectors, singular_values, _ = fbpca.pca(a_matrix, randomized_rank, True)
+    return singular_values, singular_vectors
 
 
-def implicit_restarted_lanczos_bidiagonalization(a_matrix: np.ndarray, rank: int,
-                                                 lanczos_rank: int) -> (np.ndarray, np.ndarray):
-    """
-    This function uses the implicitly Restarted Lanczos method implemented in ARPACK to compute the k highest
-    eigenvalues and corresponding eigenvectors. It should be faster as a complete svd.
-
-    !NOTE!
-    This method only works for symmetric (hermitian) matrices!!
-
-    :param a_matrix: 2D-Matrix filled with floats for which we want to find the left eigenvectors
-    :param rank: the amount of highest eigenvectors we want to find
-    :param lanczos_rank: the size of the lanczos subspace approximation
-    :return: returns the eigenvalues and eigenvectors as numpy arrays
-    """
-    eigenvalues, eigenvectors = eigsh(a_matrix, k=rank, which='LM', ncv=lanczos_rank)
-    return eigenvalues, eigenvectors
-
-
-def examples():
-    """
-    This function implements some usage examples for quick internal testing. It is not aimed for beeing used.
-    :return: None
-    """
-
-    import time
-
-    # set a random seed
-    np.random.seed(1234)
-
-    # create the random starting vector
-    x = np.random.rand(100)
-    x /= np.linalg.norm(x)
-    A = np.random.rand(100, 100)
-
-    # test the power method
-    eigval, eigvec = power_method(A, x, n_iterations=100)
-    eigvecs, eigvals, _ = np.linalg.svd(A)
-    print(eigval, eigvals[0])
-
-    # test the tridiagonalization method
-    size = 1000
-    d = 3 * np.random.rand(size)
-    e = -1 * np.random.rand(size - 1)
-    start = time.time()
-    tri_eigvals, tri_eigvecs = tridiagonal_eigenvalues(d, e, size // 2)
-    print(f'Specialized tridiagonal SVD took: {time.time() - start} s.')
-    T = np.diag(d) + np.diag(e, k=1) + np.diag(e, k=-1)
-    start = time.time()
-    eigvecs, eigvals , _ = np.linalg.svd(T)
-    print(f'Normal SVD took: {time.time() - start} s.')
-
-    # test randomized svd
-    eigval, eigvec = randomized_singular_value_decomposition(A, 20)
-    eigvecs, eigvals, _ = np.linalg.svd(A)
-    print(eigval, eigvals[0])
-
-    # test irlbd
-    eigval, eigvec, = implicit_restarted_lanczos_bidiagonalization(A, 20)
-    eigvecs, eigvals, _ = np.linalg.svd(A)
-    print(eigval, eigvals[0])
-
-
-@jit(nopython=True)
+@nb.jit(nopython=True)
 def compile_hankel(time_series: np.ndarray, end_index: int, window_size: int, rank: int, lag: int = 1) -> np.ndarray:
     """
     This function constructs a hankel matrix from a 1D time series. Please make sure constructing the matrix with
@@ -240,8 +178,370 @@ def compile_hankel(time_series: np.ndarray, end_index: int, window_size: int, ra
 
     # go through the time series and make the hankel matrix
     for cx in range(rank):
-        hankel[:, -cx-1] = time_series[(end_index-window_size-cx*lag):(end_index-cx*lag)]
+        hankel[:, -cx - 1] = time_series[(end_index - window_size - cx * lag):(end_index - cx * lag)]
     return hankel
+
+
+@nb.njit(parallel=True)
+def fast_numba_hankel_matmul(hankel_fft: np.ndarray, l_windows: int, fft_shape: int, other_matrix: np.ndarray,
+                             lag: int):
+    # get the shape of the other matrix
+    m, n = other_matrix.shape
+
+    # make fft of x (while padding x with zeros) to make up for the lag
+    if lag > 1:
+        out = np.zeros((lag * m - lag + 1, n), dtype=other_matrix.dtype)
+        out[::lag, :] = other_matrix
+    else:
+        out = other_matrix
+
+    # create the new empty matrix that we will fill with values
+    result_buffer = np.empty((l_windows, n))
+
+    # flip the other matrix
+    out = np.flipud(out)
+
+    # make a numba parallel loop over the vector of the other matrix (columns)
+    for index in nb.prange(n):
+        # compute the fft of the vector
+        fft_x = sp.fft.rfft(out[:, index], n=fft_shape)
+
+        # multiply the ffts with each other to do the convolution in frequency domain and convert it back
+        # and save it into the output buffer
+        result_buffer[:, index] = sp.fft.irfft(hankel_fft * fft_x, n=fft_shape)[(m - 1) * lag:(m - 1) * lag + l_windows]
+    return result_buffer
+
+
+@nb.njit(parallel=True)
+def fast_numba_hankel_left_matmul(hankel_fft: np.ndarray, n_windows: int, fft_shape: int, other_matrix: np.ndarray,
+                                  lag: int):
+    # transpose the other matrix
+    other_matrix = other_matrix.T
+
+    # get the shape of the other matrix
+    m, n = other_matrix.shape
+
+    # create the new empty matrix that we will fill with values
+    result_buffer = np.empty((n_windows, n))
+
+    # flip the other matrix
+    other_matrix = np.flipud(other_matrix)
+
+    # make a numba parallel loop over the vector of the other matrix (columns)
+    for index in nb.prange(n):
+        # compute the fft of the vector
+        fft_x = sp.fft.rfft(other_matrix[:, index], n=fft_shape)
+
+        # multiply the ffts with each other to do the convolution in frequency domain and convert it back
+        # and save it into the output buffer
+        result_buffer[:, index] = sp.fft.irfft(hankel_fft * fft_x, n=fft_shape)[(m - 1):(m - 1) + n_windows * lag:lag]
+    return result_buffer.T
+
+
+@nb.njit(parallel=True)
+def fast_numba_hankel_correlation_matmul(hankel_fft: np.ndarray, fft_shape: int, window_number: int,
+                                         other_matrix: np.ndarray, lag: int):
+
+    # get the shape of the other matrix
+    m, n = other_matrix.shape
+    wn = window_number
+
+    # make a buffer if we need it for lagged representation
+    if lag > 1:
+        buffer = np.zeros((lag * wn - lag + 1, n), dtype=other_matrix.dtype)
+    else:
+        # we can just use the other matrix, as we won't ever touch the buffer for lag < 1
+        # so we don't modify it
+        buffer = other_matrix
+
+    # create the new empty matrix that we will fill with values
+    result_buffer = np.empty((m, n))
+
+    # flip the other matrix
+    out = np.flipud(other_matrix)
+
+    # make a numba parallel loop over the vector of the other matrix (columns)
+    for index in nb.prange(n):
+
+        # compute the fft of the vector
+        fft_x = sp.fft.rfft(out[:, index], n=fft_shape)
+
+        # make the convolution and transform it back
+        first = sp.fft.irfft(hankel_fft * fft_x, n=fft_shape)[(m - 1):(m - 1) + lag * wn:lag]
+        # assert np.allclose(first, result[:, index]), f'{first}\n{result[:, index]}'
+
+        # check whether we have lag
+        if lag > 1:
+            buffer[::lag, index] = first
+            first = buffer[:, index]
+        first = np.flip(first)
+
+        # compute the fft of the vector
+        fft_x = sp.fft.rfft(first, n=fft_shape)
+
+        # multiply the ffts with each other to do the convolution in frequency domain and convert it back
+        # and save it into the output buffer
+        result_buffer[:, index] = sp.fft.irfft(hankel_fft*fft_x, n=fft_shape)[(wn-1)*lag:(wn-1)*lag+m]
+    return result_buffer
+
+
+def get_fast_hankel_representation(time_series, end_index, length_windows, number_windows,
+                                   lag=1) -> (np.ndarray, int, np.ndarray):
+    # get the last column of the hankel matrix. The reason for that is that we will use an algorithm for Toeplitz
+    # matrices to speed up the multiplication and Hankel[:, ::-1] == Toeplitz.
+    #
+    # The algorithm requires the first Toeplitz column and therefore the last Hankel Column
+    #
+    # It also requires the inverse of the row columns ignoring the last element. For reference see:
+    # Scipy: https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.matmul_toeplitz.html
+    # Pyroomacoustics: https://github.com/LCAV/pyroomacoustics/blob/master/pyroomacoustics/adaptive/util.py
+    #
+    # additionally we only need the combined vector from both for our multiplication. In order to employ the
+    # fastest DFT possible, the vector needs have a length with a clean power of two, which we create using
+    # zero padding
+    #
+    # We can also use the signal itself, as multiplying a vector with the hankel matrix is effectively a convolution
+    # over the signal. Therefore, we can use the fft convolution with way lower complexity or any other built in
+    # convolution library!
+
+    # get column and row, or we can also do it by using the signal itself!
+    # last_column = time_series[end_index-length_windows:end_index]
+    # row_without_last_element = time_series[end_index-lag*(number_windows-1)-length_windows:end_index-length_windows]
+    signal = time_series[end_index - lag * (number_windows - 1) - length_windows:end_index]
+
+    # get the length of the matrices
+    # col_length = last_column.shape[0]
+    # row_length = row_without_last_element.shape[0]
+    # combined_length = col_length + row_length
+
+    # compute the padded vector length for an optimal fft length. Here we can use the built-in scipy function that
+    # computes the perfect fft length optimized for their implementation, so it is even faster than with powers
+    # of two!
+    # fft_len = 1 << int(np.ceil(np.log2(combined_length)))
+    # fft_len = sp.fft.next_fast_len(combined_length, True)
+    fft_len = sp.fft.next_fast_len(signal.shape[0] + number_windows, True)
+
+    # compute the fft over the padded hankel matrix
+    # if we would pad in the middle like this: we would introduce no linear phase to the fft
+    #
+    # padded_toeplitz = np.concatenate((last_column, np.zeros((fft_len - combined_length)), row_without_last_element))
+    #
+    # but we want to use the built-in padding functionality of the fft in scipy, so we pad at the end like can be seen
+    # here.
+    # This introduces a linear phase and a shift to the fft, which we need to account for in the reverse
+    # functions.
+    #
+    # More details see:
+    # https://dsp.stackexchange.com/questions/82273/why-to-pad-zeros-at-the-middle-of-sequence-instead-at-the-end-of-the-sequence
+    # https://dsp.stackexchange.com/questions/83461/phase-of-an-fft-after-zeropadding
+    #
+    # Workers are not necessary as we expect a 1D time series
+    hankel_rfft = sp.fft.rfft(signal, n=fft_len, axis=0).reshape(-1, 1)
+    return hankel_rfft[:, 0], fft_len, signal
+
+
+class HankelFFTRepresentation:
+
+    def __init__(self, time_series: np.ndarray, end_index: int, window_length: int, window_number: int, lag: int = 1,
+                 _copy_representation: 'HankelFFTRepresentation' = None):
+
+        if _copy_representation is None:
+
+            # save the parameters that are necessary for later computations
+            self.window_length = window_length
+            self.window_number = window_number
+            self.lag = lag
+
+            # create the representation and save it into the class
+            hankel_rfft, fft_len, _ = get_fast_hankel_representation(time_series, end_index,
+                                                                     window_length, window_number, lag=lag)
+            self.hankel_rfft = hankel_rfft
+            self.fft_length = fft_len
+        else:
+
+            # check that nothing else is set
+            assert time_series is None and end_index is None and window_length is None and lag is None \
+                , 'Using the constructor for copying requires all other options to be set to None.'
+
+            # copy the parameters from the other model
+            self.window_length = _copy_representation.window_length
+            self.window_number = _copy_representation.window_number
+            self.lag = 1
+            self.hankel_rfft = _copy_representation.hankel_rfft
+            self.fft_length = _copy_representation.fft_length
+
+    def multiply_other_from_right(self, other_matrix: np.ndarray) -> np.ndarray:
+        # check the dimensions
+        if other_matrix.shape[0] != self.window_number:
+            raise ValueError(f'matmul: Right matrix has a mismatch in its core dimension 0 '
+                             f'(size {other_matrix.shape[0]} is different from {self.window_number})')
+
+        # make the product
+        return fast_numba_hankel_matmul(self.hankel_rfft, self.window_length, self.fft_length, other_matrix,
+                                        self.lag)
+
+    def multiply_other_from_left(self, other_matrix: np.ndarray) -> np.ndarray:
+
+        # check the dimensions
+        if other_matrix.shape[1] != self.window_length:
+            raise ValueError(f'matmul: Left matrix has a mismatch in its core dimension 0 '
+                             f'(size {other_matrix.shape[1]} is different from {self.window_length})')
+
+        # make the product
+        return fast_numba_hankel_left_matmul(self.hankel_rfft, self.window_number, self.fft_length, other_matrix,
+                                             self.lag)
+
+    @property
+    def T(self) -> 'HankelFFTRepresentation':
+
+        # create a shallow copy
+        new_matrix = self.shallow_copy()
+
+        # check that we have no lag in column direction, as we have not implemented lag in row direction
+        # for the multiplications yet
+        if new_matrix.lag != 1:
+            raise ValueError('As of now we can not calculate with transposed lagged Hankel matrices.')
+
+        # switch the window sizes
+        new_matrix.window_number, new_matrix.window_length = new_matrix.window_length, new_matrix.window_number
+        return new_matrix
+
+    def __matmul__(self, other):
+
+        # right side matmul
+        if isinstance(other, np.ndarray):
+            return self.multiply_other_from_right(other)
+
+        # right side matmul with transposed
+        elif isinstance(other, self.__class__):
+            # check that the fft representation is the same and only transposed
+            if self.equal_hankel_transposed(other):
+                return HankelCorrelationFFTRepresentation(self)
+            else:
+                raise ValueError('At this point matmul is only supported for itself with its transposed from left.')
+
+    def __array_ufunc__(self, ufunc, method, *args, **kwargs):
+        if method != '__call__' or len(kwargs) > 0 or len(args) != 2:
+            raise NotImplemented
+        if ufunc == np.matmul:
+            # left side matmul
+            if isinstance(args[0], np.ndarray) and args[1] is self:
+                return self.multiply_other_from_left(args[0])
+            else:
+                raise NotImplemented
+        else:
+            raise NotImplemented
+
+    def shallow_copy(self) -> 'HankelFFTRepresentation':
+
+        # type hints don't like this, but I don't want to add None to the hint, as normal users should not use
+        # directly use the constructor for copying.
+        return HankelFFTRepresentation(time_series=None, end_index=None, window_length=None, window_number=None,
+                                       lag=None, _copy_representation=self)
+
+    def equal_hankel(self, other: 'HankelFFTRepresentation') -> bool:
+        return (self.hankel_rfft is other.hankel_rfft
+                and self.window_number == other.window_number and self.window_length == other.window_length)
+
+    def equal_hankel_transposed(self, other: 'HankelFFTRepresentation') -> bool:
+        return (self.hankel_rfft is other.hankel_rfft
+                and self.window_number == other.window_length and self.window_length == other.window_number)
+
+
+class HankelCorrelationFFTRepresentation:
+
+    def __init__(self, hankel_matrix: HankelFFTRepresentation):
+
+        # save the parameters that are necessary for later computations
+        self.hankel_rfft = hankel_matrix.hankel_rfft
+        self.fft_length = hankel_matrix.fft_length
+        self.window_length = hankel_matrix.window_length
+        self.window_number = hankel_matrix.window_number
+        self.lag = hankel_matrix.lag
+        self.hankel_matrix = hankel_matrix
+
+    def __matmul__(self, other_matrix: np.ndarray) -> np.ndarray:
+        if isinstance(other_matrix, np.ndarray):
+            return fast_numba_hankel_correlation_matmul(self.hankel_rfft, self.fft_length, self.window_number, other_matrix, self.lag)
+        else:
+            raise NotImplemented
+
+
+def examples():
+    """
+    This function implements some usage examples for quick internal testing. It is not aimed at being used.
+    :return: None
+    """
+
+    import time
+
+    # create a random signal
+    signal = np.random.rand(100)*1000
+
+    # create the two different hankel representations
+    hankel_matrix_fft = HankelFFTRepresentation(signal, 100, 50, 20, lag=1)
+    hankel_matrix = compile_hankel(signal, end_index=100, window_size=50, rank=20, lag=1)
+
+    # create test matrices to multiply with
+    other_matrix = np.random.rand(20, 65)
+    other_matrix2 = np.random.rand(50, 15)
+
+    # test the right product
+    res = hankel_matrix_fft @ other_matrix
+    res2 = hankel_matrix @ other_matrix
+    print('Test right:', np.allclose(res, res2))
+
+    # test the left product
+    res = other_matrix2.T @ hankel_matrix_fft
+    res2 = other_matrix2.T @ hankel_matrix
+    print('Test left:', np.allclose(res, res2))
+
+    # test the transposed right product
+    res = hankel_matrix_fft.T @ other_matrix2
+    res2 = hankel_matrix.T @ other_matrix2
+    print('Test transposed right:', np.allclose(res, res2))
+
+    # test the transposed left product
+    res = other_matrix.T @ hankel_matrix_fft.T
+    res2 = other_matrix.T @ hankel_matrix.T
+    print('Test transposed left:', np.allclose(res, res2))
+
+    # check the correlation matrix multiplication
+    hankel_corr = hankel_matrix @ hankel_matrix.T
+    hankel_fft_corr = hankel_matrix_fft @ hankel_matrix_fft.T
+    res = hankel_fft_corr @ other_matrix2
+    res2 = hankel_corr @ other_matrix2
+    print('Test correlation multiplication:', np.allclose(res, res2))
+
+    # set a random seed
+    np.random.seed(1234)
+
+    # create the random starting vector
+    x = np.random.rand(100)
+    x /= np.linalg.norm(x)
+    A = np.random.rand(100, 100)
+
+    # test the power method
+    singval, singvec = power_method(A, x, n_iterations=100)
+    singvecs, singvals, _ = np.linalg.svd(A)
+    print(singval, singvals[0])
+
+    # test the tridiagonalization method for speed
+    size = 1000
+    d = 3 * np.random.rand(size)
+    e = -1 * np.random.rand(size - 1)
+    start = time.time()
+    tri_eigvals, tri_eigvecs = tridiagonal_eigenvalues(d, e, size // 2)
+    print(f'Specialized tridiagonal SVD took: {time.time() - start} s.')
+    T = np.diag(d) + np.diag(e, k=1) + np.diag(e, k=-1)
+    start = time.time()
+    singvecs, singvals, _ = np.linalg.svd(T)
+    print(f'Normal SVD took: {time.time() - start} s.')
+
+    # test randomized svd
+    singval, singvec = facebook_randomized_svd(A, 20)
+    singvecs, singvals, _ = np.linalg.svd(A)
+    print(singval, singvals[0])
 
 
 if __name__ == '__main__':
