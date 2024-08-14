@@ -1,5 +1,7 @@
 # this file contains utility functions for handling and computing matrices needed for some of the algorithms in this
 # package
+import collections
+
 import numpy as np
 import numba as nb
 
@@ -161,12 +163,12 @@ def randomized_hankel_svd(hankel_matrix: np.ndarray, k: int, subspace_iteration_
     """
 
     # get the parameter l from the paper
-    sample_length_l = k+oversampling_p
-    assert 1.25*sample_length_l < min(hankel_matrix.shape)
+    sample_length_l = k + oversampling_p
+    assert 1.25 * sample_length_l < min(hankel_matrix.shape)
 
     # Apply A to a random matrix, obtaining Q.
     random_matrix_omega = np.random.uniform(low=-1, high=1, size=(hankel_matrix.shape[0], sample_length_l))
-    projection_matrix_q = hankel_matrix@random_matrix_omega
+    projection_matrix_q = hankel_matrix @ random_matrix_omega
 
     # Form a matrix Q whose columns constitute a well-conditioned basis for the columns of the earlier Q.
     if subspace_iteration_q == 0:
@@ -286,7 +288,6 @@ def fast_numba_hankel_left_matmul(hankel_fft: np.ndarray, n_windows: int, fft_sh
 @nb.njit(parallel=True)
 def fast_numba_hankel_correlation_matmul(hankel_fft: np.ndarray, fft_shape: int, window_number: int,
                                          other_matrix: np.ndarray, lag: int):
-
     # get the shape of the other matrix
     m, n = other_matrix.shape
     wn = window_number
@@ -326,8 +327,54 @@ def fast_numba_hankel_correlation_matmul(hankel_fft: np.ndarray, fft_shape: int,
 
         # multiply the ffts with each other to do the convolution in frequency domain and convert it back
         # and save it into the output buffer
-        result_buffer[:, index] = sp.fft.irfft(hankel_fft*fft_x, n=fft_shape)[(wn-1)*lag:(wn-1)*lag+m]
+        result_buffer[:, index] = sp.fft.irfft(hankel_fft * fft_x, n=fft_shape)[(wn - 1) * lag:(wn - 1) * lag + m]
     return result_buffer
+
+
+# @nb.njit(parallel=True)
+def fast_numba_blockwise_matmul(hankel_ffts: list[np.ndarray], l_windows: int, fft_shape: int, other_matrix: np.ndarray,
+                                result_buffer: np.ndarray) -> None:
+
+    # get the shape of the other matrix
+    m, n = other_matrix.shape
+
+    # flip the other matrix
+    out = np.flipud(other_matrix)
+
+    # make a numba parallel loop over the vector of the other matrix (columns)
+    for index in nb.prange(n):
+        # compute the fft of the vector (column of other_matrix)
+        fft_x = sp.fft.rfft(out[:, index], n=fft_shape)
+
+        # multiply the ffts with each other to do the convolution in frequency domain and convert it back
+        # and save it into the output buffer (do that for all elements in the row)
+        for hx, hankel_fft in enumerate(hankel_ffts):
+            result_buffer[hx*l_windows:(hx+1)*l_windows, index] += sp.fft.irfft(hankel_fft * fft_x, n=fft_shape)[(m-1): (m-1) + l_windows]
+
+
+@nb.njit(parallel=True)
+def fast_numba_hankel_blockwise_left_matmul(hankel_ffts: list[np.ndarray], n_windows: int, fft_shape: int,
+                                            other_matrix: np.ndarray, result_buffer: np.ndarray) -> None:
+
+    # transpose the other matrix
+    other_matrix = other_matrix.T
+
+    # get the shape of the other matrix
+    m, n = other_matrix.shape
+
+    # flip the other matrix
+    other_matrix = np.flipud(other_matrix)
+
+    # make a numba parallel loop over the vector of the other matrix (columns)
+    for index in nb.prange(n):
+        # compute the fft of the vector
+        fft_x = sp.fft.rfft(other_matrix[:, index], n=fft_shape)
+
+        # multiply the ffts with each other to do the convolution in frequency domain and convert it back
+        # and save it into the output buffer
+        for hx, hankel_fft in enumerate(hankel_ffts):
+            result_buffer[index, hx*n_windows:(hx+1)*n_windows] \
+                += sp.fft.irfft(hankel_fft * fft_x, n=fft_shape)[(m - 1):(m - 1) + n_windows]
 
 
 def get_fast_hankel_representation(time_series, end_index, length_windows, number_windows,
@@ -386,23 +433,32 @@ def get_fast_hankel_representation(time_series, end_index, length_windows, numbe
 
 
 class HankelFFTRepresentation:
+    """
+    This matrix represents a Hankel matrix and makes matrix multiplication with it faster:
+
+    See our paper for more details:
+    Efficient Hankel Matrix Decomposition for Changepoint Detection
+    Lucas Weber, Richard Lenz 2024
+    """
 
     def __init__(self, time_series: np.ndarray, end_index: int, window_length: int, window_number: int, lag: int = 1,
                  _copy_representation: 'HankelFFTRepresentation' = None):
 
+        # create new hankel matrix
         if _copy_representation is None:
 
             # save the parameters that are necessary for later computations
             self.window_length = window_length
             self.window_number = window_number
             self.lag = lag
-            self.shape = (window_length, window_number)
 
             # create the representation and save it into the class
             hankel_rfft, fft_len, _ = get_fast_hankel_representation(time_series, end_index,
                                                                      window_length, window_number, lag=lag)
             self.hankel_rfft = hankel_rfft
             self.fft_length = fft_len
+
+        # copy existing hankel matrix
         else:
 
             # check that nothing else is set
@@ -415,6 +471,9 @@ class HankelFFTRepresentation:
             self.lag = 1
             self.hankel_rfft = _copy_representation.hankel_rfft
             self.fft_length = _copy_representation.fft_length
+
+        # set the shape property
+        self.shape = (self.window_length, self.window_number)
 
     def multiply_other_from_right(self, other_matrix: np.ndarray) -> np.ndarray:
         # check the dimensions
@@ -468,15 +527,39 @@ class HankelFFTRepresentation:
 
     def __array_ufunc__(self, ufunc, method, *args, **kwargs):
         if method != '__call__' or len(kwargs) > 0 or len(args) != 2:
-            raise NotImplemented
+            return NotImplemented
         if ufunc == np.matmul:
             # left side matmul
             if isinstance(args[0], np.ndarray) and args[1] is self:
                 return self.multiply_other_from_left(args[0])
             else:
-                raise NotImplemented
+                return NotImplemented
         else:
-            raise NotImplemented
+            return NotImplemented
+
+    def __array_function__(self, func, types, args, kwargs):
+        """
+        We currently only support concatenation.
+        https://numpy.org/neps/nep-0018-array-function-protocol.html
+        """
+        if func != np.concatenate:
+            return NotImplemented
+        if not all(issubclass(t, self.__class__) for t in types):
+            return NotImplemented
+
+        # check the keyword arguments
+        axis = kwargs.get('axis', 0)
+        if axis not in [0, 1]:
+            raise ValueError('Concatenation only in the first two dimensions.')
+
+        # check that we only received one arg
+        if len(args) > 1:
+            raise ValueError('We only accept one non keyword argument.')
+
+        # create the list of matrices
+        matrix_list = [(matrix, matrix.shape[0]*idx if axis == 0 else 0, matrix.shape[1]*idx if axis == 1 else 0)
+                       for idx, matrix in enumerate(args[0])]
+        return MultilevelHankelFFTRepresentation(matrix_list)
 
     def shallow_copy(self) -> 'HankelFFTRepresentation':
 
@@ -495,6 +578,10 @@ class HankelFFTRepresentation:
 
 
 class HankelCorrelationFFTRepresentation:
+    """
+    This class represents a matrix -atrix product of a hankel matrix, e.g., H*H.T.
+    It is needed as the multiplication with it needs to go through two iterations instead of one.
+    """
 
     def __init__(self, hankel_matrix: HankelFFTRepresentation):
 
@@ -509,9 +596,201 @@ class HankelCorrelationFFTRepresentation:
 
     def __matmul__(self, other_matrix: np.ndarray) -> np.ndarray:
         if isinstance(other_matrix, np.ndarray):
-            return fast_numba_hankel_correlation_matmul(self.hankel_rfft, self.fft_length, self.window_number, other_matrix, self.lag)
+            return fast_numba_hankel_correlation_matmul(self.hankel_rfft, self.fft_length, self.window_number,
+                                                        other_matrix, self.lag)
         else:
-            raise NotImplemented
+            raise NotImplementedError('Matmul only supported for other numpy arrays.')
+
+
+class MultilevelHankelFFTRepresentation:
+    """
+    This class implements multiplication with a multilevel Hankel matrix, i.e., a matrix which can be divided into
+    multiple parts that each have Hankel structure.
+
+    We expect to receive a list of:
+    - Hankel matrices as HankelFFTRepresentation objects
+    - The positions of the Hankel matrices in the original matrix (upper left row, upper left col)
+    """
+
+    def __init__(self, matrix_tuples: list[tuple[HankelFFTRepresentation, int, int]]):
+
+        # check the input
+        max_row, max_col, rows, cols, fft_length = self.check_input(matrix_tuples)
+
+        # extract the matrices
+        self.matrices = [matrix_tuple[0] for matrix_tuple in matrix_tuples]
+
+        # extract the positions
+        self.positions = np.array([(*matrix_tuple[1:], *matrix_tuple[0].shape) for matrix_tuple in matrix_tuples])
+
+        # keep the shape of the matrix
+        self.shape = (max_row, max_col)
+        self.sub_matrix_shape = (rows, cols)
+        self.fft_length = fft_length
+
+        # collect all indices for matrices starting at the same column
+        self.row_matrices = collections.defaultdict(list)
+        self.column_matrices = collections.defaultdict(list)
+        for idx, (rx, cx, _, _) in enumerate(self.positions):
+            self.row_matrices[cx].append(idx)
+            self.column_matrices[rx].append(idx)
+
+        # IMPORTANT!!: Sort the indices so the matrices are used in the right order (for the matmul later)
+        for idx, idces in self.row_matrices.items():
+            self.row_matrices[idx] = sorted(idces, key=lambda x: self.positions[x, 1])
+        for idx, idces in self.column_matrices.items():
+            self.column_matrices[idx] = sorted(idces, key=lambda x: self.positions[x, 0])
+
+    @staticmethod
+    def check_input(input_list: list[tuple[HankelFFTRepresentation, int, int]]) -> (int, int, int, int):
+
+        # check whether the list is empty
+        if len(input_list) < 1:
+            raise ValueError('You did not input any Hankel matrices.')
+
+        # go through the elements and check the format
+        for idx, tupled in enumerate(input_list):
+
+            # check the correct size
+            if len(tupled) != 3:
+                raise ValueError(f'Tuple {idx} does not have the expected length of three (length {len(tupled)}).')
+
+            # check that we received the correct matrix objects
+            if not isinstance(tupled[0], HankelFFTRepresentation):
+                raise ValueError(f'Tuple {idx} is not a HankelFFTRepresentation object (type {type(tupled[0])}).')
+
+            # check that we received integer positions
+            if not isinstance(tupled[1], int) or not isinstance(tupled[2], int):
+                raise ValueError(f'Tuple {idx} has non integer positions (type {type(tupled[1])}, {type(tupled[2])}).')
+
+            # check that we only accept lag of one
+            if tupled[0].lag != 1:
+                raise ValueError(f'Tuple {idx} has lagged hankel matrices (lag {tupled[0].lag}).')
+            
+        # transform the matrix positions into a numpy array
+        positions = np.array([(*matrix_tuple[1:], *matrix_tuple[0].shape) for matrix_tuple in input_list])
+        max_rx, max_cx = np.max(positions[:, :2] + positions[:, 2:], axis=0)
+
+        # check whether the fft-shapes are equal
+        fft_shape = set(tupled[0].fft_length for tupled in input_list)
+        if len(fft_shape) != 1:
+            raise ValueError(f'Not all matrices have the same fft length.')
+        fft_shape = fft_shape.pop()
+        
+        # check whether widths and heights are equal
+        row_number = set(positions[:, 2])
+        if len(row_number) != 1:
+            raise ValueError(f'Not all matrices have the same number of rows.')
+        column_number = set(positions[:, 3])
+        if len(column_number) != 1:
+            raise ValueError(f'Not all matrices have the same number of columns.')
+        row_number = row_number.pop()
+        column_number = column_number.pop()
+        
+        # create the expected row numbers
+        expected_starts = set((rx, cx) for rx in range(0, max_rx, row_number) for cx in range(0, max_cx, column_number))
+
+        # compare the expected positions with the real ones
+        for start_row, start_col, _, _ in positions:
+            if (start_row, start_col) in expected_starts:
+                expected_starts.remove((start_row, start_col))
+            else:
+                raise ValueError('Some positions are not as expected')
+        if len(expected_starts):
+            raise ValueError('Some positions are missing.')
+
+        # return the matrix size and the row and column numbers
+        return max_rx, max_cx, row_number, column_number, fft_shape
+
+    @property
+    def T(self) -> 'MultilevelHankelFFTRepresentation':
+        """
+        Compute the transposed.
+        Only the internal matrices are copied!
+        :return:
+        """
+
+        # switch the shape
+        self.shape = tuple(reversed(self.shape))
+
+        # switch the columns of the positions
+        # https://stackoverflow.com/a/4857981
+        self.positions[:, [0, 1, 2, 3]] = self.positions[:, [1, 0, 3, 2]]
+
+        # switch the submatrix shapes
+        self.sub_matrix_shape = tuple(reversed(self.sub_matrix_shape))
+
+        # go through all of our matrices and transpose them
+        self.matrices = [matrix.T for matrix in self.matrices]
+
+        # switch the collections for row-wise and column-wise matrices
+        self.row_matrices, self.column_matrices = self.column_matrices, self.row_matrices
+
+        return self
+
+    def __matmul__(self, other):
+
+        # right side matmul
+        if isinstance(other, np.ndarray):
+            return self.multiply_other_from_right(other)
+        else:
+            raise NotImplementedError('Currently this class only support matmul with numpy arrays.')
+
+    def __array_ufunc__(self, ufunc, method, *args, **kwargs):
+        if method != '__call__' or len(kwargs) > 0 or len(args) != 2:
+            return NotImplemented
+        if ufunc == np.matmul:
+            # left side matmul
+            if isinstance(args[0], np.ndarray) and args[1] is self:
+                return self.multiply_other_from_left(args[0])
+            else:
+                return NotImplemented
+        else:
+            return NotImplemented
+
+    def multiply_other_from_right(self, other: np.ndarray):
+
+        # we need to create a target matrix
+        result = np.zeros((self.shape[0], other.shape[1]))
+        l_windows, n_windows = self.sub_matrix_shape
+
+        # check the matrix shapes
+        if self.shape[1] != other.shape[0]:
+            raise ValueError(f'Shape missmatch: {self.shape} multiplied with {other.shape} is not possible.')
+
+        # go through all blocks in row direction and make the computation
+        for idx_list in self.row_matrices.values():
+
+            # create the list of ffts
+            ffts = nb.typed.List(self.matrices[idx].hankel_rfft for idx in idx_list)
+
+            # get the starting column and end column
+            start_col = self.positions[idx_list[0], 1]
+            end_col = start_col + self.positions[idx_list[0], 3]
+            fast_numba_blockwise_matmul(ffts, l_windows, self.fft_length, other[start_col: end_col, :], result)
+        return result
+
+    def multiply_other_from_left(self, other: np.ndarray):
+
+        # we need to create a target matrix
+        result = np.zeros((other.shape[0], self.shape[1]))
+        l_windows, n_windows = self.sub_matrix_shape
+
+        # check the matrix shapes
+        if self.shape[0] != other.shape[1]:
+            raise ValueError(f'Shape missmatch: {other.shape} multiplied with {self.shape} is not possible.')
+
+        # go through all blocks in row direction and make the computation
+        for idx_list in self.column_matrices.values():
+            # create the list of ffts
+            ffts = nb.typed.List(self.matrices[idx].hankel_rfft for idx in idx_list)
+
+            # get the starting column and end column
+            start_row = self.positions[idx_list[0], 0]
+            end_row = start_row + self.positions[idx_list[0], 2]
+            fast_numba_hankel_blockwise_left_matmul(ffts, n_windows, self.fft_length, other[:, start_row:end_row],
+                                                    result)
+        return result
 
 
 def examples():
@@ -523,15 +802,44 @@ def examples():
     import time
 
     # create a random signal
-    signal = np.random.rand(100)*1000
+    signal = np.random.rand(200) * 1000
 
     # create the two different hankel representations
     hankel_matrix_fft = HankelFFTRepresentation(signal, 100, 50, 20, lag=1)
+    hankel_matrix_fft2 = HankelFFTRepresentation(signal, 200, 50, 20, lag=1)
     hankel_matrix = compile_hankel(signal, end_index=100, window_size=50, rank=20, lag=1)
+    hankel_matrix2 = compile_hankel(signal, end_index=200, window_size=50, rank=20, lag=1)
 
     # create test matrices to multiply with
     other_matrix = np.random.rand(20, 65)
     other_matrix2 = np.random.rand(50, 15)
+
+    # create multilevel matrices by concatenation
+    multi_hankel_fft = np.concatenate((hankel_matrix_fft, hankel_matrix_fft2, hankel_matrix_fft), axis=1)
+    multi_hankel = np.concatenate((hankel_matrix, hankel_matrix2, hankel_matrix), axis=1)
+    print(multi_hankel_fft.shape)
+
+    # create additional test matrices to multiply with
+    other_multi_matrix = np.random.rand(60, 65)
+    other_multi_matrix_left = np.random.rand(200, 50)
+
+    # test the multilevel hankel matrix right product
+    res = multi_hankel_fft @ other_multi_matrix
+    res2 = multi_hankel @ other_multi_matrix
+    print('Test multilevel right multiplication:', np.allclose(res, res2))
+
+    # test the multilevel hankel matrix left product
+    res = other_multi_matrix_left @ multi_hankel_fft
+    res2 = other_multi_matrix_left @ multi_hankel
+    print('Test multilevel left multiplication:', np.allclose(res, res2))
+
+    # test the multilevel hankel matrix left product transposed
+    multi_hankel_fft = multi_hankel_fft.T
+    multi_hankel = multi_hankel.T
+    other_multi_matrix_left = np.random.rand(200, multi_hankel_fft.shape[0])
+    res = other_multi_matrix_left @ multi_hankel_fft
+    res2 = other_multi_matrix_left @ multi_hankel
+    print('Test multilevel left multiplication:', np.allclose(res, res2))
 
     # test the right product
     res = hankel_matrix_fft @ other_matrix

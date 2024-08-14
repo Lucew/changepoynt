@@ -26,7 +26,7 @@ class TestLinearAlgebra:
         self.singvecs, self.singvals, _ = np.linalg.svd(self.A)
 
         # create a random signal
-        self.signal = np.random.rand(100) * 1000
+        self.signal = np.random.rand(300) * 1000
 
         # create test matrices to multiply with
         self.other_matrix = np.random.rand(20, 65)
@@ -117,6 +117,48 @@ class TestLinearAlgebra:
         res = hankel_fft_corr @ self.other_matrix2
         res2 = hankel_corr @ self.other_matrix2
         np.testing.assert_almost_equal(res, res2)
+
+    def test_multilevel_hankel_product(self):
+
+        # create a list of end indices for the hankel matrices
+        end_idces = np.random.random_integers(100, 300, 5)
+
+        # go through the end indices and build hankel matrices to multiply
+        hankel_fft_list = list(lg.HankelFFTRepresentation(self.signal, end_index=edx, window_length=50,
+                                                          window_number=20, lag=1)
+                               for edx in end_idces)
+        hankel_list = list(lg.compile_hankel(self.signal, end_index=edx, window_size=50, rank=20, lag=1)
+                           for edx in end_idces)
+
+        # make the right product in both concatenation directions
+        hankel_fft = np.concatenate(hankel_fft_list, axis=0)
+        hankel = np.concatenate(hankel_list, axis=0)
+        other_matrix = np.random.rand(hankel_fft.shape[1], 75)*10
+        np.testing.assert_almost_equal(hankel_fft @ other_matrix, hankel @ other_matrix)
+        other_matrix = np.random.rand(hankel_fft.shape[0], 75) * 10
+        np.testing.assert_almost_equal(hankel_fft.T @ other_matrix, hankel.T @ other_matrix)  # also test the transpose
+
+        hankel_fft = np.concatenate(hankel_fft_list, axis=1)
+        hankel = np.concatenate(hankel_list, axis=1)
+        other_matrix = np.random.rand(hankel_fft.shape[1], 75) * 10
+        np.testing.assert_almost_equal(hankel_fft @ other_matrix, hankel @ other_matrix)
+        other_matrix = np.random.rand(hankel_fft.shape[0], 75) * 10
+        np.testing.assert_almost_equal(hankel_fft.T @ other_matrix, hankel.T @ other_matrix)  # also test the transpose
+
+        # make the left product in both concatenation directions
+        hankel_fft = np.concatenate(hankel_fft_list, axis=0)
+        hankel = np.concatenate(hankel_list, axis=0)
+        other_matrix = np.random.rand(75, hankel_fft.shape[0]) * 10
+        np.testing.assert_almost_equal(other_matrix @ hankel_fft, other_matrix @ hankel)
+        other_matrix = np.random.rand(75, hankel_fft.shape[1]) * 10
+        np.testing.assert_almost_equal(other_matrix @ hankel_fft.T, other_matrix @ hankel.T)  # also test the transpose
+
+        hankel_fft = np.concatenate(hankel_fft_list, axis=1)
+        hankel = np.concatenate(hankel_list, axis=1)
+        other_matrix = np.random.rand(75, hankel_fft.shape[0]) * 10
+        np.testing.assert_almost_equal(other_matrix @ hankel_fft, other_matrix @ hankel)
+        other_matrix = np.random.rand(75, hankel_fft.shape[1]) * 10
+        np.testing.assert_almost_equal(other_matrix @ hankel_fft.T, other_matrix @ hankel.T)  # also test the transpose
 
 
 if __name__ == "__main__":
