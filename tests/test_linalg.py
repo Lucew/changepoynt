@@ -121,7 +121,7 @@ class TestLinearAlgebra:
     def test_multilevel_hankel_product(self):
 
         # create a list of end indices for the hankel matrices
-        end_idces = np.random.random_integers(100, 300, 5)
+        end_idces = np.random.randint(100, 300, 5)
 
         # go through the end indices and build hankel matrices to multiply
         hankel_fft_list = list(lg.HankelFFTRepresentation(self.signal, end_index=edx, window_length=50,
