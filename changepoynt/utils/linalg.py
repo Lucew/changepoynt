@@ -331,9 +331,9 @@ def fast_numba_hankel_correlation_matmul(hankel_fft: np.ndarray, fft_shape: int,
     return result_buffer
 
 
-# @nb.njit(parallel=True)
-def fast_numba_blockwise_matmul(hankel_ffts: list[np.ndarray], l_windows: int, fft_shape: int, other_matrix: np.ndarray,
-                                result_buffer: np.ndarray) -> None:
+@nb.njit(parallel=True)
+def fast_numba_blockwise_matmul(hankel_ffts: tuple[np.ndarray], l_windows: int, fft_shape: int,
+                                other_matrix: np.ndarray, result_buffer: np.ndarray) -> None:
 
     # get the shape of the other matrix
     m, n = other_matrix.shape
@@ -349,11 +349,12 @@ def fast_numba_blockwise_matmul(hankel_ffts: list[np.ndarray], l_windows: int, f
         # multiply the ffts with each other to do the convolution in frequency domain and convert it back
         # and save it into the output buffer (do that for all elements in the row)
         for hx, hankel_fft in enumerate(hankel_ffts):
-            result_buffer[hx*l_windows:(hx+1)*l_windows, index] += sp.fft.irfft(hankel_fft * fft_x, n=fft_shape)[(m-1): (m-1) + l_windows]
+            result_buffer[hx*l_windows:(hx+1)*l_windows, index] \
+                += sp.fft.irfft(hankel_fft * fft_x, n=fft_shape)[(m-1): (m-1) + l_windows]
 
 
 @nb.njit(parallel=True)
-def fast_numba_hankel_blockwise_left_matmul(hankel_ffts: list[np.ndarray], n_windows: int, fft_shape: int,
+def fast_numba_hankel_blockwise_left_matmul(hankel_ffts: tuple[np.ndarray], n_windows: int, fft_shape: int,
                                             other_matrix: np.ndarray, result_buffer: np.ndarray) -> None:
 
     # transpose the other matrix
@@ -762,7 +763,7 @@ class MultilevelHankelFFTRepresentation:
         for idx_list in self.row_matrices.values():
 
             # create the list of ffts
-            ffts = nb.typed.List(self.matrices[idx].hankel_rfft for idx in idx_list)
+            ffts = tuple(self.matrices[idx].hankel_rfft for idx in idx_list)
 
             # get the starting column and end column
             start_col = self.positions[idx_list[0], 1]
@@ -783,7 +784,7 @@ class MultilevelHankelFFTRepresentation:
         # go through all blocks in row direction and make the computation
         for idx_list in self.column_matrices.values():
             # create the list of ffts
-            ffts = nb.typed.List(self.matrices[idx].hankel_rfft for idx in idx_list)
+            ffts = tuple(self.matrices[idx].hankel_rfft for idx in idx_list)
 
             # get the starting column and end column
             start_row = self.positions[idx_list[0], 0]
@@ -791,6 +792,50 @@ class MultilevelHankelFFTRepresentation:
             fast_numba_hankel_blockwise_left_matmul(ffts, n_windows, self.fft_length, other[:, start_row:end_row],
                                                     result)
         return result
+
+
+def timing_tests():
+    import time
+
+    # create a random signal
+    signal = np.random.rand(200_000) * 1000
+
+    # define how large the hanke matrices should be
+    hankel_size = 1200
+
+    # create a list of end indices for the hankel matrices
+    end_idces = np.random.randint(hankel_size*2, signal.shape[0], 2)
+
+    # go through the end indices and build hankel matrices to multiply
+    hankel_fft_list = list(HankelFFTRepresentation(signal, end_index=edx, window_length=hankel_size,
+                                                   window_number=hankel_size//2, lag=1)
+                           for edx in end_idces)
+    hankel_list = list(compile_hankel(signal, end_index=edx, window_size=hankel_size, rank=hankel_size//2, lag=1)
+                       for edx in end_idces)
+
+    # create the matrices
+    hankel_fft = np.concatenate(hankel_fft_list, axis=1)
+    print(hankel_fft.shape)
+    hankel = np.concatenate(hankel_list, axis=1)
+    print(hankel.shape)
+
+    # make the other matrix
+    # TODO: The fast hankel matrix product scales really bad with the second dimension of other_matrix, fix?
+    other_matrix = np.random.rand(hankel_fft.shape[1], 15)*10
+
+    # make the product and measure the time
+    res = hankel_fft @ other_matrix
+    start = time.perf_counter()
+    for _ in range(100):
+        res = hankel_fft @ other_matrix
+    print(f'Fast Hankel product took: {time.perf_counter() - start} s.')
+
+    start = time.perf_counter()
+    for _ in range(100):
+        res2 = hankel @ other_matrix
+    print(f'Normal Hankel product took: {time.perf_counter() - start} s.')
+
+    print(np.allclose(res, res2))
 
 
 def examples():
@@ -900,4 +945,5 @@ def examples():
 
 
 if __name__ == '__main__':
+    timing_tests()
     examples()
