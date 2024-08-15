@@ -333,13 +333,16 @@ def fast_numba_hankel_correlation_matmul(hankel_fft: np.ndarray, fft_shape: int,
 
 @nb.njit(parallel=True)
 def fast_numba_blockwise_matmul(hankel_ffts: tuple[np.ndarray], l_windows: int, fft_shape: int,
-                                other_matrix: np.ndarray, result_buffer: np.ndarray) -> None:
+                                other_matrix: np.ndarray) -> np.ndarray:
 
     # get the shape of the other matrix
     m, n = other_matrix.shape
 
     # flip the other matrix
     out = np.flipud(other_matrix)
+
+    # create a buffer to keep the result
+    result_buffer = np.empty((len(hankel_ffts)*l_windows, n))
 
     # make a numba parallel loop over the vector of the other matrix (columns)
     for index in nb.prange(n):
@@ -349,13 +352,13 @@ def fast_numba_blockwise_matmul(hankel_ffts: tuple[np.ndarray], l_windows: int, 
         # multiply the ffts with each other to do the convolution in frequency domain and convert it back
         # and save it into the output buffer (do that for all elements in the row)
         for hx, hankel_fft in enumerate(hankel_ffts):
-            result_buffer[hx*l_windows:(hx+1)*l_windows, index] \
-                += sp.fft.irfft(hankel_fft * fft_x, n=fft_shape)[(m-1): (m-1) + l_windows]
+            result_buffer[hx*l_windows:(hx+1)*l_windows, index] = sp.fft.irfft(hankel_fft * fft_x, n=fft_shape)[(m-1): (m-1) + l_windows]
+    return result_buffer
 
 
 @nb.njit(parallel=True)
 def fast_numba_hankel_blockwise_left_matmul(hankel_ffts: tuple[np.ndarray], n_windows: int, fft_shape: int,
-                                            other_matrix: np.ndarray, result_buffer: np.ndarray) -> None:
+                                            other_matrix: np.ndarray) -> np.ndarray:
 
     # transpose the other matrix
     other_matrix = other_matrix.T
@@ -366,6 +369,9 @@ def fast_numba_hankel_blockwise_left_matmul(hankel_ffts: tuple[np.ndarray], n_wi
     # flip the other matrix
     other_matrix = np.flipud(other_matrix)
 
+    # create a buffer to keep the result
+    result_buffer = np.empty((n, n_windows*len(hankel_ffts)))
+
     # make a numba parallel loop over the vector of the other matrix (columns)
     for index in nb.prange(n):
         # compute the fft of the vector
@@ -375,7 +381,8 @@ def fast_numba_hankel_blockwise_left_matmul(hankel_ffts: tuple[np.ndarray], n_wi
         # and save it into the output buffer
         for hx, hankel_fft in enumerate(hankel_ffts):
             result_buffer[index, hx*n_windows:(hx+1)*n_windows] \
-                += sp.fft.irfft(hankel_fft * fft_x, n=fft_shape)[(m - 1):(m - 1) + n_windows]
+                = sp.fft.irfft(hankel_fft * fft_x, n=fft_shape)[(m - 1):(m - 1) + n_windows]
+    return result_buffer
 
 
 def get_fast_hankel_representation(time_series, end_index, length_windows, number_windows,
@@ -611,6 +618,8 @@ class MultilevelHankelFFTRepresentation:
     We expect to receive a list of:
     - Hankel matrices as HankelFFTRepresentation objects
     - The positions of the Hankel matrices in the original matrix (upper left row, upper left col)
+
+    TODO: Currently only tested with row/col concatenation [H,H]/[[H],[H]] and not with multiple blocks [[H, H], [H, H]]
     """
 
     def __init__(self, matrix_tuples: list[tuple[HankelFFTRepresentation, int, int]]):
@@ -768,7 +777,12 @@ class MultilevelHankelFFTRepresentation:
             # get the starting column and end column
             start_col = self.positions[idx_list[0], 1]
             end_col = start_col + self.positions[idx_list[0], 3]
-            fast_numba_blockwise_matmul(ffts, l_windows, self.fft_length, other[start_col: end_col, :], result)
+
+            # compute the result
+            tmp = fast_numba_blockwise_matmul(ffts, l_windows, self.fft_length, other[start_col: end_col, :])
+
+            # put the result in
+            result += tmp
         return result
 
     def multiply_other_from_left(self, other: np.ndarray):
@@ -789,8 +803,12 @@ class MultilevelHankelFFTRepresentation:
             # get the starting column and end column
             start_row = self.positions[idx_list[0], 0]
             end_row = start_row + self.positions[idx_list[0], 2]
-            fast_numba_hankel_blockwise_left_matmul(ffts, n_windows, self.fft_length, other[:, start_row:end_row],
-                                                    result)
+
+            # compute the result
+            tmp = fast_numba_hankel_blockwise_left_matmul(ffts, n_windows, self.fft_length, other[:, start_row:end_row])
+
+            # put the result in
+            result += tmp
         return result
 
 
@@ -801,7 +819,7 @@ def timing_tests():
     signal = np.random.rand(200_000) * 1000
 
     # define how large the hanke matrices should be
-    hankel_size = 1200
+    hankel_size = 800
 
     # create a list of end indices for the hankel matrices
     end_idces = np.random.randint(hankel_size*2, signal.shape[0], 2)
@@ -821,7 +839,7 @@ def timing_tests():
 
     # make the other matrix
     # TODO: The fast hankel matrix product scales really bad with the second dimension of other_matrix, fix?
-    other_matrix = np.random.rand(hankel_fft.shape[1], 15)*10
+    other_matrix = np.random.rand(hankel_fft.shape[1], 25)*10
 
     # make the product and measure the time
     res = hankel_fft @ other_matrix
@@ -946,4 +964,4 @@ def examples():
 
 if __name__ == '__main__':
     timing_tests()
-    examples()
+    # examples()
