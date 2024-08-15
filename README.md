@@ -110,7 +110,7 @@ You can also install the code from source using the following line
 
     pip install git+https://github.com/Lucew/changepoynt.git
 
-# Frequently Asked Question (FAQ)
+# Frequently Asked Questions (FAQ)
 
 Find the [FAQs](https://github.com/Lucew/changepoynt/blob/master/docs/FAQ.md) in the related Markdown 
 [document](https://github.com/Lucew/changepoynt/blob/master/docs/FAQ.md).

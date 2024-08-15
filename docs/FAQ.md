@@ -1,4 +1,4 @@
-# Frequently Asked Question (FAQ)
+# Frequently Asked Questions (FAQ)
 
 ## How can I set the window size?
 Unfortunately, there is no one answer to this question. Setting the window size essentially specifies the region of
