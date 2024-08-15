@@ -110,6 +110,11 @@ You can also install the code from source using the following line
 
     pip install git+https://github.com/Lucew/changepoynt.git
 
+# Frequently Asked Question (FAQ)
+
+Find the [FAQs](https://github.com/Lucew/changepoynt/blob/master/docs/FAQ.md) in the related Markdown 
+[document](https://github.com/Lucew/changepoynt/blob/master/docs/FAQ.md).
+
 # Algorithms <a id="algorithms"></a>
 
 We are actively working on the package. Therefore, some algorithms are already available, while others
