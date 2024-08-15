@@ -34,7 +34,7 @@ Currently, we are focused on shifting to the very common and existing sklearn in
 enables our algorithms to be part of the standard sklearn pipeline for preprocessing.
 
 # Quick Start <a id="quickstart"></a>
-If you want to start using the package right away, we recommend to use one of the singular spectrum transformation
+If you want to start using the package right away, we recommend using one of the singular spectrum transformation
 algorithms (SST). The first step is to install the package using pip. Then you can use the following example code:
 
 ```python
@@ -102,9 +102,13 @@ following line with pip:
 
  
 
-Please be aware, that we are currently in an alpha development phase, as this is part of a research project at the FAU 
+Please be aware that we are currently in an alpha development phase, as this is part of a research project at the FAU 
 Erlangen together with SIEMENS Energy developed by [me](https://www.cs6.tf.fau.de/person/lucas-weber/). Nevertheless, 
 we aim to be open-source and try our best to guarantee that all the code we use has very permissive licenses.
+
+You can also install the code from source using the following line
+
+    pip install git+https://github.com/Lucew/changepoynt.git
 
 # Algorithms <a id="algorithms"></a>
 
@@ -142,6 +146,6 @@ not want to be in the way!
 We are actively working on the package, and currently have the following steps planned:
 
 - We are actively working on a benchmark tool for change point algorithms
-- Implement Bayesion online change point detection
+- Implement Bayesian online change point detection
 
 If you have further ideas, do not hesitate to open a ticket or a pull request!
