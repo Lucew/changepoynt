@@ -964,4 +964,4 @@ def examples():
 
 if __name__ == '__main__':
     timing_tests()
-    # examples()
+    examples()

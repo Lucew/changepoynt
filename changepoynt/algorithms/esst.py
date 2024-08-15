@@ -19,7 +19,7 @@ class ESST(Algorithm):
 
     def __init__(self, window_length: int, n_windows: int = None, lag: int = None, rank: int = 5,
                  scale: bool = True, method: str = 'fbrsvd', random_rank: int = None, scoring_step: int = 1,
-                 parallel: bool = False, use_fast_hankel: bool = False, threads: int = 2) -> None:
+                 parallel: bool = False, use_fast_hankel: bool = False, threads: int = 6) -> None:
         """
         Experimental change point detection method evaluation the prevalence of change points within a signal
         by comparing the difference in eigenvectors between to points in time.
@@ -293,7 +293,7 @@ def _main():
     x += np.random.rand(x.size)
 
     # create the method
-    esst_recognizer = ESST(960, method='rsvd', parallel=False, use_fast_hankel=False)
+    esst_recognizer = ESST(960, method='rsvd', parallel=False, use_fast_hankel=True, threads=6)
 
     # compute the score
     start = time()
