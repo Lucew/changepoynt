@@ -1,3 +1,5 @@
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
 from typing import Callable
@@ -19,7 +21,7 @@ class ESST(Algorithm):
 
     def __init__(self, window_length: int, n_windows: int = None, lag: int = None, rank: int = 5,
                  scale: bool = True, method: str = 'fbrsvd', random_rank: int = None, scoring_step: int = 1,
-                 parallel: bool = False, use_fast_hankel: bool = False, threads: int = 6) -> None:
+                 parallel: bool = False, use_fast_hankel: bool = False, threads: int = None) -> None:
         """
         Experimental change point detection method evaluation the prevalence of change points within a signal
         by comparing the difference in eigenvectors between to points in time.
@@ -56,7 +58,8 @@ class ESST(Algorithm):
 
         :param use_fast_hankel: Whether to deploy the fast hankel matrix product.
 
-        :param threads: The number of threads the fast hankel matrix product is allowed to use.
+        :param threads: The number of threads the fast hankel matrix product is allowed to use. Default is the number
+        of cpu cores your system has available.
         """
 
         # save the specified parameters into instance variables
@@ -82,6 +85,8 @@ class ESST(Algorithm):
             # compute the rank as specified in [3] and
             # https://scikit-learn.org/stable/modules/generated/sklearn.utils.extmath.randomized_svd.html
             self.random_rank = min(self.rank + 10, self.window_length, self.n_windows)
+        if self.threads is None:
+            self.threads = os.cpu_count()
 
         # specify the methods and their corresponding functions as lambda functions expecting only the hankel matrix
         self.methods = {'rsvd': partial(left_entropy, rank=self.rank, random_rank=self.random_rank,
