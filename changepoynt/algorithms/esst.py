@@ -58,8 +58,8 @@ class ESST(Algorithm):
 
         :param use_fast_hankel: Whether to deploy the fast hankel matrix product.
 
-        :param threads: The number of threads the fast hankel matrix product is allowed to use. Default is the number
-        of cpu cores your system has available.
+        :param threads: The number of threads the fast hankel matrix product is allowed to use. Default is the half of
+        the number of cpu cores your system has available.
         """
 
         # save the specified parameters into instance variables
@@ -86,7 +86,7 @@ class ESST(Algorithm):
             # https://scikit-learn.org/stable/modules/generated/sklearn.utils.extmath.randomized_svd.html
             self.random_rank = min(self.rank + 10, self.window_length, self.n_windows)
         if self.threads is None:
-            self.threads = os.cpu_count()
+            self.threads = os.cpu_count()//2
 
         # specify the methods and their corresponding functions as lambda functions expecting only the hankel matrix
         self.methods = {'rsvd': partial(left_entropy, rank=self.rank, random_rank=self.random_rank,
