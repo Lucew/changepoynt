@@ -303,7 +303,7 @@ def _rayleigh_singular_value_decomposition(hankel_past: np.ndarray, hankel_futur
 
     # compute the projection distance
     alpha = singvecs_past.T @ eigvec_future
-    return 1 - alpha.sum(), eigvec_future
+    return 1 - alpha.T @ alpha, eigvec_future
 
 
 def _facebook_random_singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
@@ -390,7 +390,6 @@ def _random_singular_value_decomposition(hankel_past: np.ndarray, hankel_future:
     return 1 - alpha.T @ alpha, eigvec_future
 
 
-
 def main():
     """This function is not intended for users, but for quick testing during development."""
     from time import time
@@ -413,7 +412,7 @@ def main():
     start = time()
     ika_sst.transform(x)
     # print((time() - start) / (length * 3))
-    svd_sst.transform(x)
+    print(svd_sst.transform(x))
     rsvd_sst.transform(x)
     fbrsvd_sst.transform(x)
 
