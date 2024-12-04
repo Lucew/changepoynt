@@ -298,7 +298,7 @@ def _main():
     x += np.random.rand(x.size)
 
     # create the method
-    esst_recognizer = ESST(960, method='rsvd', parallel=False, use_fast_hankel=True, threads=6)
+    esst_recognizer = ESST(300, method='rsvd', parallel=False, use_fast_hankel=True)
 
     # compute the score
     start = time()
