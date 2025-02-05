@@ -16,7 +16,6 @@
 # Gerrit J. J. van den Burg and Christopher K. I. Williams
 # arXiv preprint arXiv:2003.06222, 2020
 import numpy as np
-from socks import method
 
 from changepoynt.algorithms.base_algorithm import Algorithm
 
