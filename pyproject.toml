@@ -9,12 +9,12 @@ version = "0.0.8"
 authors = [
   { name="Lucas Weber", email="weber-lucas@web.de" },
 ]
-description = "Efficient and readable change point detection package implemented in Python. (Singular Spectrum Transformation - SST, IKA-SST, ulSIF, RuSLIF, KLIEP, FLUSS, FLOSS, etc.)"
+description = "Efficient and readable change point detection package implemented in Python. (Singular Spectrum Transformation - SST, IKA-SST, ulSIF, RuLSIF, KLIEP, FLUSS, FLOSS, etc.)"
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: BSD-2 License",
+    "License :: OSI Approved :: BSD-2-Clause",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering",
 ]
