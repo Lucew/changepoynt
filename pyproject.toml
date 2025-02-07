@@ -14,12 +14,12 @@ readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: BSD-2 License",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering",
 ]
 license = {file = "LICENSE"}
-keywords = ['changepoint', 'timeseries', 'engineering', 'SST']
+keywords = ['changepoint', 'times eries', 'engineering', 'SST', 'change point detection', 'CPD']
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
