@@ -23,7 +23,8 @@ class RuLSIF(Algorithm):
     """
 
     def __init__(self, window_length: int = 10, n_windows: int = 50, lag: int = None, estimation_lag: int = None,
-                 scoring_step: int = 1, n_kernels: int = 100, alpha: float = 0.01, symmetric=True) -> None:
+                 scoring_step: int = 1, n_kernels: int = 100, alpha: float = 0.01, symmetric: bool = True,
+                 parallel: bool = False) -> None:
         """
         This defines all necessary parameters for the RuLSIF to work.
         :param window_length: the length of the windows we want to compare the densities for (k in the paper)
@@ -43,6 +44,7 @@ class RuLSIF(Algorithm):
         self.alpha = alpha
         self.scoring_step = scoring_step
         self.symmetric = symmetric
+        self.parallel = parallel
 
         # check that alpha does not exceed the bounds
         assert 0 <= self.alpha < 1, 'The alpha parameter should be in the interval [0,1).'
@@ -74,12 +76,18 @@ class RuLSIF(Algorithm):
         if self.symmetric:
 
             # compute the scores with two workers one going forward and the other one backward
-            with mp.Pool(2) as workers:
-                result = workers.starmap(_transform,
-                                         ((time_series, starting_point, self.window_length, self.n_windows, self.lag,
-                                           self.scoring_step, estimator),
-                                          (time_series[::-1], starting_point, self.window_length, self.n_windows,
-                                           self.lag, self.scoring_step, estimator)))
+            if self.parallel:
+                with mp.Pool(2) as workers:
+                    result = workers.starmap(_transform,
+                                             ((time_series, starting_point, self.window_length, self.n_windows,
+                                               self.lag, self.scoring_step, estimator),
+                                              (time_series[::-1], starting_point, self.window_length, self.n_windows,
+                                               self.lag, self.scoring_step, estimator)))
+            else:
+                result = [_transform(time_series, starting_point, self.window_length, self.n_windows, self.lag,
+                                     self.scoring_step, estimator),
+                          _transform(time_series[::-1], starting_point, self.window_length, self.n_windows,
+                                     self.lag, self.scoring_step, estimator)]
 
             return result[0] + result[1][::-1]
 
