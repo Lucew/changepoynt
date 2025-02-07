@@ -10,6 +10,7 @@
  - [Algorithms](#algorithms)
  - [Installation](#installation)
  - [Contributing](#contributing)
+ - [Known Issues](#known-issues)
  - [Outlook](#outlook)
 
 This is the repository hosting the **pip-installable** python package changepoynt. It implements several 
