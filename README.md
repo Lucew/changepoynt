@@ -150,6 +150,18 @@ If you are an author of a paper in the field or have another algorithmic idea: F
 Currently, we are still working on the contribution guides. But if somebody already comes along and has an idea, we do 
 not want to be in the way!
 
+# Known Issues <a id="known-issues"></a>
+
+Some of the methods like SST (with method='ika') and (R)uLSIF have issues when running for trivial sections of time
+series. This includes steady series (e.g., only zero values, just lines with some slope). Intuitively, these methods aim
+to extract multiple characteristics in these sections but there are none, so they run into issues. Errors you will
+encounter are: "Matrix is singular" or "division by zero". Unfortunately, the math behind these errors is more
+complicated and I have not yet found a good way to circumvent these errors.
+
+Fortunately, there is an easy workaround. Just add a small white noise to your signal, e.g. by adding 
+`signal += np.random.normal(0, 1e-4, size=signal.shape[0])`. With noise much smaller than you signal you will not
+introduce large additional change points and the methods will not fail.
+
 # Outlook <a id="outlook"></a>
 
 We are actively working on the package, and currently have the following steps planned:
