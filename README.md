@@ -1,4 +1,8 @@
 # Python Changepoint Detection (changepoynt)
+[![PyPI version](https://img.shields.io/pypi/v/changepoynt?color=%2376519B)](https://pypi.org/project/changepoynt/)
+[![License](https://img.shields.io/pypi/l/changepoynt?color=%2376519B)](https://opensource.org/licenses/BSD-2-Clause)
+[![python](https://img.shields.io/pypi/pyversions/changepoynt?color=%2376519B)](https://pypi.org/project/changepoynt/)
+[![downloads](https://img.shields.io/pypi/dm/changepoynt?color=%2376519B)](https://pypi.org/project/changepoynt/)
 
 **Table of content:**
  - [Quickstart](#quickstart)
