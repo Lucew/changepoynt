@@ -137,7 +137,7 @@ are currently under development. An overview with sources can be seen here:
 | FLUSS     | [Gharghabi et al.](https://ieeexplore.ieee.org/abstract/document/8215484)         | Stable :heavy_check_mark:  |
 | FLOSS     | [Gharghabi et al.](https://ieeexplore.ieee.org/abstract/document/8215484)         | Stable :heavy_check_mark:  |
 | BOCPD     | [Adams et al.](https://arxiv.org/abs/0710.3742)                                   | Experimental (mean change) |
-| Baseline  | Weber                                                                             | Stable heavy_check_mark:   |
+| Baseline  | Weber                                                                             | Stable :heavy_check_mark:  |
 
 
 
