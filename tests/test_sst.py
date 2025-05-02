@@ -37,12 +37,24 @@ class TestSST:
         # initialize the scorer
         sst = ssts.SST(50, method="svd")
         sst.transform(self.signal)
+        with pytest.raises(ValueError):
+            sst = ssts.SST(50, method="svd", use_fast_hankel=True)
+            res2 = sst.transform(self.signal)
+
+    def test_rectangle_matrix(self):
+
+        # initialize the scorer
+        sst = ssts.SST(50, 20, method="ika")
+        sst.transform(self.signal)
 
     def test_fbrsvd_method(self):
 
         # initialize the scorer
         sst = ssts.SST(50, method="fbrsvd")
         sst.transform(self.signal)
+        with pytest.raises(ValueError):
+            sst = ssts.SST(50, method="fbrsvd", use_fast_hankel=True)
+            res2 = sst.transform(self.signal)
 
     def test_rsvd_method(self):
 
@@ -59,6 +71,15 @@ class TestSST:
         res = sst.transform(self.signal)
         sst = ssts.SST(50, method="ika", use_fast_hankel=True)
         res2 = sst.transform(self.signal)
+
+    def test_naive_method(self):
+
+        # initialize the scorer
+        sst = ssts.SST(50, method="naive")
+        res = sst.transform(self.signal)
+        with pytest.raises(ValueError):
+            sst = ssts.SST(50, method="naive", use_fast_hankel=True)
+            res2 = sst.transform(self.signal)
 
     def test_default(self):
         ssts.SST(min(5, self.signal_length//2), rank=2).transform(self.signal)
