@@ -1,4 +1,5 @@
 import numpy as np
+
 from changepoynt.utils import linalg as lg
 from changepoynt.utils import normalization
 from typing import Callable
@@ -46,7 +47,8 @@ class SST(Algorithm):
 
     def __init__(self, window_length: int, n_windows: int = None, lag: int = None, rank: int = 5, scale: bool = True,
                  method: str = 'ika', lanczos_rank: int = None, random_rank: int = None,
-                 feedback_noise_level: float = 1e-3, scoring_step: int = 1, use_fast_hankel: bool = False) -> None:
+                 feedback_noise_level: float = 1e-3, scoring_step: int = 1, use_fast_hankel: bool = False,
+                 mitigate_offset: bool = False) -> None:
         """
         Initializing the Singular Spectrum Transformation (SST) requires setting a lot of parameters. See the parameters
         explanation for some intuition into the right choices. Currently, there are two SST methods from [1] and [2]
@@ -93,6 +95,11 @@ class SST(Algorithm):
         of the signal.
 
         :param scoring_step: the distance between scoring steps in samples (e.g., 2 would half the computation).
+
+        :param use_fast_hankel: Use the O(N*logN) version for the decomposition. This is likely to have large
+        speed improvements for window sizes > 150
+
+        :param mitigate_offset: Use a sliding mean window to mitigate the constant offset of time series.
         """
 
         # save the specified parameters into instance variables
@@ -107,6 +114,7 @@ class SST(Algorithm):
         self.noise = feedback_noise_level
         self.scoring_step = scoring_step
         self.use_fast_hankel = use_fast_hankel
+        self.mitigate_offset = mitigate_offset
 
         # set some default values when they have not been specified
         if self.n_windows is None:
@@ -137,15 +145,17 @@ class SST(Algorithm):
                                         randomized_rank=self.random_rank),
                         'fbrsvd': partial(_facebook_random_singular_value_decomposition,
                                           rank=self.rank,
-                                          randomized_rank=self.random_rank)
+                                          randomized_rank=self.random_rank),
+                        'naive': partial(_naive_singular_value_decomposition,
+                                          rank=self.rank)
                         }
         if self.method not in self.methods:
             raise ValueError(f'Method {self.method} not defined. Possible methods: {list(self.methods.keys())}.')
 
         # set up the methods we use for the construction of the hankel matrix (either it is the fft representation
         # of the other one)
-        if use_fast_hankel and (self.method == 'svd' or self.method == 'fbrsvd'):
-            raise ValueError(f'SVD method is not defined with use_fast_hankel=True')
+        if use_fast_hankel and self.method not in ["rsvd", "ika"]:
+            raise ValueError(f'{self.method} method is not defined with use_fast_hankel=True')
         self.hankel_construction = {
             False: lg.compile_hankel,
             True: lg.HankelFFTRepresentation
@@ -188,12 +198,14 @@ class SST(Algorithm):
         # start the scaling itself by calling the jit compiled staticmethod and return the result
         score = _transform(time_series=time_series, start_idx=starting_point, window_length=self.window_length,
                            n_windows=self.n_windows, lag=self.lag, scoring_step=self.scoring_step,
-                           scoring_function=scoring_function, hankel_construction_function=hankel_function)
+                           scoring_function=scoring_function, hankel_construction_function=hankel_function,
+                           mitigate_offset=self.mitigate_offset)
         return score
 
 
 def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_windows: int, lag: int, scoring_step: int,
-               scoring_function: Callable, hankel_construction_function: Callable) -> np.ndarray:
+               scoring_function: Callable, hankel_construction_function: Callable,
+               mitigate_offset: bool = False) -> np.ndarray:
     """
     Compute heavy and hopefully jit compilable score computation for the SST method. It does not do any parameter
     checking and can throw cryptic errors. It's only used for internal use as a private function.
@@ -209,7 +221,7 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
 
     # create initial vector for ika method with feedback dominant eigenvector as proposed in [2]
     # with a norm of one
-    x0 = np.random.rand(n_windows)[:, None]
+    x0 = np.random.rand(window_length)[:, None]
     x0 /= np.linalg.norm(x0)
 
     # initialize a scoring array with no values yet
@@ -218,13 +230,30 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
     # make an offset for the data construction
     offset = n_windows // 2 + lag
 
+    # compute the sliding mean value for the complete time series using a convolution
+    # we get the length of the sliding window from the start index
+    # the sliding window contains both hankel matrices
+    current_min = None
+    if mitigate_offset:
+        current_min = np.mean(np.lib.stride_tricks.sliding_window_view(time_series, window_shape = start_idx), axis = 1)
+
     # iterate over all the values in the signal starting at start_idx computing the change point score
     for idx in range(start_idx, time_series.shape[0], scoring_step):
+
+        # get the constant offset (is zero if the option is deactivated)
+        if mitigate_offset:
+            const_offset = current_min[idx-start_idx]-1
+        else:
+            const_offset = None
+
+
         # compile the past hankel matrix (H1)
-        hankel_past = hankel_construction_function(time_series, idx - lag, window_length, n_windows)
+        hankel_past = hankel_construction_function(time_series, idx - lag, window_length, n_windows,
+                                                   const_offset=const_offset)
 
         # compile the future hankel matrix (H2)
-        hankel_future = hankel_construction_function(time_series, idx, window_length, n_windows)
+        hankel_future = hankel_construction_function(time_series, idx, window_length, n_windows,
+                                                     const_offset=const_offset)
 
         # compute the score and save the returned feedback vector
         score[idx - offset - scoring_step // 2:idx - offset + (scoring_step + 1) // 2], x1 = \
@@ -388,6 +417,32 @@ def _random_singular_value_decomposition(hankel_past: np.ndarray, hankel_future:
     # compute the change point score as defined in the papers
     alpha = singvecs_past[:, :rank].T @ eigvec_future
     return 1 - alpha.T @ alpha, eigvec_future
+
+
+def _naive_singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
+                                         rank: int):
+    """
+    This function implements the naive sst as proposed in
+
+    Idé, Tsuyoshi, and Keisuke Inoue.
+    "Knowledge discovery from heterogeneous dynamic systems using change-point correlations."
+    Proceedings of the 2005 SIAM international conference on data mining.
+    Society for Industrial and Applied Mathematics, 2005.
+
+    See the appendix on why the svd is used on the eigenvectors as well
+
+    :param hankel_past: the past hankel matrix
+    :param hankel_future: the future hankel matrix
+    :param x0: the random future eigenvector (not used at his point)
+    :param rank: the rank for the sst
+    :return: the score and the future vector
+    """
+    eigvec_past, _, _ = np.linalg.svd(hankel_past, full_matrices=False)
+    eigvec_future, _, _ = np.linalg.svd(hankel_future, full_matrices=False)
+    eigvec_past = eigvec_past[:, :rank]
+    eigvec_future = eigvec_future[:, :rank]
+    s = np.linalg.svd(np.dot(eigvec_past.T, eigvec_future), full_matrices=False, compute_uv=False)
+    return 1 - s[0], x0
 
 
 def main():
