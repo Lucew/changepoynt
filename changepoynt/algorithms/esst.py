@@ -21,7 +21,8 @@ class ESST(Algorithm):
 
     def __init__(self, window_length: int, n_windows: int = None, lag: int = None, rank: int = 5,
                  scale: bool = True, method: str = 'fbrsvd', random_rank: int = None, scoring_step: int = 1,
-                 parallel: bool = False, use_fast_hankel: bool = False, threads: int = None) -> None:
+                 parallel: bool = False, use_fast_hankel: bool = False, threads: int = None,
+                 mitigate_offset: bool = False) -> None:
         """
         Experimental change point detection method evaluation the prevalence of change points within a signal
         by comparing the difference in eigenvectors between to points in time.
@@ -60,6 +61,8 @@ class ESST(Algorithm):
 
         :param threads: The number of threads the fast hankel matrix product is allowed to use. Default is the half of
         the number of cpu cores your system has available.
+
+        :param mitigate_offset: Use a sliding mean window to mitigate the constant offset of time series.
         """
 
         # save the specified parameters into instance variables
@@ -74,6 +77,7 @@ class ESST(Algorithm):
         self.use_fast_hankel = use_fast_hankel
         self.method = method
         self.threads = threads
+        self.mitigate_offset = mitigate_offset
 
         # set some default values when they have not been specified
         if self.n_windows is None:
@@ -138,14 +142,15 @@ class ESST(Algorithm):
 
         if self.parallel:
             return _transform_parallel(time_series, starting_point, self.window_length, self.n_windows, self.lag,
-                                       self.scoring_step, scoring_function, hankel_function)
+                                       self.scoring_step, scoring_function, hankel_function, self.mitigate_offset)
         else:
             return _transform(time_series, starting_point, self.window_length, self.n_windows, self.lag,
-                              self.scoring_step, scoring_function, hankel_function)
+                              self.scoring_step, scoring_function, hankel_function, self.mitigate_offset)
 
 
 def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_windows: int, lag: int, scoring_step: int,
-               scoring_function: Callable, hankel_construction_function: Callable) -> np.ndarray:
+               scoring_function: Callable, hankel_construction_function: Callable,
+               mitigate_offset: bool = False) -> np.ndarray:
     """
     Compute heavy and hopefully jit compilable score computation for the SST method. It does not do any parameter
     checking and can throw cryptic errors. It's only used for internal use as a private function.
@@ -162,14 +167,29 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
     # compute the offset
     offset = (n_windows + lag)
 
+    # compute the sliding mean value for the complete time series using a convolution
+    # we get the length of the sliding window from the start index
+    # the sliding window contains both hankel matrices
+    current_min = None
+    if mitigate_offset:
+        current_min = np.median(np.lib.stride_tricks.sliding_window_view(time_series, window_shape=start_idx), axis=1)
+
     # iterate over all the values in the signal starting at start_idx computing the change point score
     for idx in range(start_idx, time_series.shape[0], scoring_step):
 
+        # get the constant offset (is zero if the option is deactivated)
+        if mitigate_offset:
+            const_offset = current_min[idx - start_idx] - 1
+        else:
+            const_offset = None
+
         # compile the past hankel matrix (H1)
-        hankel_past = hankel_construction_function(time_series, idx - lag, window_length, n_windows)
+        hankel_past = hankel_construction_function(time_series, idx - lag, window_length, n_windows,
+                                                   const_offset=const_offset)
 
         # compile the future hankel matrix (H2)
-        hankel_future = hankel_construction_function(time_series, idx, window_length, n_windows)
+        hankel_future = hankel_construction_function(time_series, idx, window_length, n_windows,
+                                                     const_offset=const_offset)
 
         # compute the score and save the returned feedback vector
         score[idx-offset-scoring_step//2:idx-offset+(scoring_step+1)//2] = \
@@ -180,7 +200,7 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
 
 def _transform_parallel(time_series: np.ndarray, start_idx: int, window_length: int, n_windows: int, lag: int,
                         scoring_step: int, scoring_function: Callable,
-                        hankel_construction_function: Callable) -> np.ndarray:
+                        hankel_construction_function: Callable, mitigate_offset: bool = False) -> np.ndarray:
     """
     Compute heavy and hopefully jit compilable score computation for the SST method. It does not do any parameter
     checking and can throw cryptic errors. It's only used for internal use as a private function.
