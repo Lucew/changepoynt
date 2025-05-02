@@ -79,10 +79,11 @@ def lanczos(a_matrix: np.ndarray, r_0: np.ndarray, k: int) -> (np.ndarray, np.nd
         new_q = r_i / betas[j]
 
         # compute the new alpha
-        alphas[j + 1] = new_q.T @ (a_matrix @ new_q)
+        intermediate_amatrix_newq = a_matrix @ new_q
+        alphas[j + 1] = new_q.T @ intermediate_amatrix_newq
 
         # compute the new r
-        r_i = a_matrix @ new_q - alphas[j + 1] * new_q - betas[j] * q_i
+        r_i = intermediate_amatrix_newq - alphas[j + 1] * new_q - betas[j] * q_i
 
         # compute the next beta
         betas[j + 1] = np.linalg.norm(r_i)
@@ -167,7 +168,7 @@ def randomized_hankel_svd(hankel_matrix: np.ndarray, k: int, subspace_iteration_
     assert 1.25 * sample_length_l < min(hankel_matrix.shape)
 
     # Apply A to a random matrix, obtaining Q.
-    random_matrix_omega = np.random.uniform(low=-1, high=1, size=(hankel_matrix.shape[0], sample_length_l))
+    random_matrix_omega = np.random.uniform(low=-1, high=1, size=(hankel_matrix.shape[1], sample_length_l))
     projection_matrix_q = hankel_matrix @ random_matrix_omega
 
     # Form a matrix Q whose columns constitute a well-conditioned basis for the columns of the earlier Q.
@@ -202,8 +203,9 @@ def randomized_hankel_svd(hankel_matrix: np.ndarray, k: int, subspace_iteration_
     return U[:, :k], s[:k], Va[:k, :]
 
 
-@nb.jit(nopython=True)
-def compile_hankel(time_series: np.ndarray, end_index: int, window_size: int, rank: int, lag: int = 1) -> np.ndarray:
+@nb.njit()
+def compile_hankel(time_series: np.ndarray, end_index: int, window_size: int, rank: int, lag: int = 1,
+                   const_offset: float = None) -> np.ndarray:
     """
     This function constructs a hankel matrix from a 1D time series. Please make sure constructing the matrix with
     the given parameters (end index, window size, etc.) is possible, as this function does no checks due to
@@ -214,6 +216,7 @@ def compile_hankel(time_series: np.ndarray, end_index: int, window_size: int, ra
     :param window_size: the size of the windows cut from the time series
     :param rank: the amount of time series in the matrix
     :param lag: the lag between the time series of the different columns
+    :param const_offset: an offset subtracted from all values of the time series before filling the hankel matrix
     :return: The hankel matrix with lag one
     """
 
@@ -226,10 +229,12 @@ def compile_hankel(time_series: np.ndarray, end_index: int, window_size: int, ra
     # go through the time series and make the hankel matrix
     for cx in range(rank):
         hankel[:, -cx - 1] = time_series[(end_index - window_size - cx * lag):(end_index - cx * lag)]
+    if const_offset is not None:
+        hankel = hankel - const_offset
     return hankel
 
 
-@nb.njit(parallel=True)
+@nb.njit(parallel=False)
 def fast_numba_hankel_matmul(hankel_fft: np.ndarray, l_windows: int, fft_shape: int, other_matrix: np.ndarray,
                              lag: int):
     # get the shape of the other matrix
@@ -259,7 +264,7 @@ def fast_numba_hankel_matmul(hankel_fft: np.ndarray, l_windows: int, fft_shape: 
     return result_buffer
 
 
-@nb.njit(parallel=True)
+@nb.njit(parallel=False)
 def fast_numba_hankel_left_matmul(hankel_fft: np.ndarray, n_windows: int, fft_shape: int, other_matrix: np.ndarray,
                                   lag: int):
     # transpose the other matrix
@@ -285,7 +290,8 @@ def fast_numba_hankel_left_matmul(hankel_fft: np.ndarray, n_windows: int, fft_sh
     return result_buffer.T
 
 
-@nb.njit(parallel=True)
+# 'float64[:,:](complex128[::1], int64, int64, float64[:,:], int64)',
+@nb.njit(parallel=False)
 def fast_numba_hankel_correlation_matmul(hankel_fft: np.ndarray, fft_shape: int, window_number: int,
                                          other_matrix: np.ndarray, lag: int):
     # get the shape of the other matrix
@@ -331,7 +337,7 @@ def fast_numba_hankel_correlation_matmul(hankel_fft: np.ndarray, fft_shape: int,
     return result_buffer
 
 
-@nb.njit(parallel=True)
+@nb.njit(parallel=False)
 def fast_numba_blockwise_matmul(hankel_ffts: tuple[np.ndarray], l_windows: int, fft_shape: int,
                                 other_matrix: np.ndarray) -> np.ndarray:
 
@@ -356,7 +362,7 @@ def fast_numba_blockwise_matmul(hankel_ffts: tuple[np.ndarray], l_windows: int, 
     return result_buffer
 
 
-@nb.njit(parallel=True)
+@nb.njit(parallel=False)
 def fast_numba_hankel_blockwise_left_matmul(hankel_ffts: tuple[np.ndarray], n_windows: int, fft_shape: int,
                                             other_matrix: np.ndarray) -> np.ndarray:
 
@@ -386,7 +392,7 @@ def fast_numba_hankel_blockwise_left_matmul(hankel_ffts: tuple[np.ndarray], n_wi
 
 
 def get_fast_hankel_representation(time_series, end_index, length_windows, number_windows,
-                                   lag=1) -> (np.ndarray, int, np.ndarray):
+                                   lag=1, const_offset: float = None) -> (np.ndarray, int, np.ndarray):
     # get the last column of the hankel matrix. The reason for that is that we will use an algorithm for Toeplitz
     # matrices to speed up the multiplication and Hankel[:, ::-1] == Toeplitz.
     #
@@ -408,6 +414,8 @@ def get_fast_hankel_representation(time_series, end_index, length_windows, numbe
     # last_column = time_series[end_index-length_windows:end_index]
     # row_without_last_element = time_series[end_index-lag*(number_windows-1)-length_windows:end_index-length_windows]
     signal = time_series[end_index - lag * (number_windows - 1) - length_windows:end_index]
+    if const_offset is not None:
+        signal = signal - const_offset
 
     # get the length of the matrices
     # col_length = last_column.shape[0]
@@ -450,7 +458,7 @@ class HankelFFTRepresentation:
     """
 
     def __init__(self, time_series: np.ndarray, end_index: int, window_length: int, window_number: int, lag: int = 1,
-                 _copy_representation: 'HankelFFTRepresentation' = None):
+                 const_offset: float = 0.0, _copy_representation: 'HankelFFTRepresentation' = None):
 
         # create new hankel matrix
         if _copy_representation is None:
@@ -459,10 +467,12 @@ class HankelFFTRepresentation:
             self.window_length = window_length
             self.window_number = window_number
             self.lag = lag
+            self.const_offset = const_offset
 
             # create the representation and save it into the class
             hankel_rfft, fft_len, _ = get_fast_hankel_representation(time_series, end_index,
-                                                                     window_length, window_number, lag=lag)
+                                                                     window_length, window_number, lag=lag,
+                                                                     const_offset=const_offset)
             self.hankel_rfft = hankel_rfft
             self.fft_length = fft_len
 
@@ -479,6 +489,7 @@ class HankelFFTRepresentation:
             self.lag = 1
             self.hankel_rfft = _copy_representation.hankel_rfft
             self.fft_length = _copy_representation.fft_length
+            self.const_offset = _copy_representation.const_offset
 
         # set the shape property
         self.shape = (self.window_length, self.window_number)
