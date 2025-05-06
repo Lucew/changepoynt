@@ -45,32 +45,40 @@ class BaseTrend:
         pass
 
 
-class NoTrend(BaseTrend):
-    """
-    A class that is the default trend: No trend, adding an offset of zero.
-    """
-    def __init__(self, shape: tuple[int]):
+class ConstantTrend(BaseTrend):
 
-        # save the intended shape
-        self.shape_var = shape
-        self.offset = 0.0
+    def __init__(self, offset: float, shape: tuple[int] | "Signal"):
 
-    def render(self, *args, **kwargs) -> float:
+        # save the variables
+        self.offset = offset
+        self.shape_tuple = Signal.translate_shape(shape)
+
+    def render(self):
         return self.offset
 
     @property
-    def shape(self) -> tuple:
-        return self.shape_var
+    def shape(self):
+        return self.shape_tuple
 
     def __eq__(self, other: object) -> bool:
 
-        # check that we are compared to another BaseTrend
+        # check that we only are compared with other trends
         if not isinstance(other, BaseTrend):
-            raise TypeError(f'Cannot compare {type(other)} with {type(self)}.')
+            raise TypeError(f"Cannot compare class {type(other)} with a Trend.")
 
-        # check whether the other is a different trend then no equality
-        # if other is NoTrend, we have equality
-        return isinstance(other, type(self))
+        # check whether the other one is also a constant trend (NoTrend or ConstantOffset)
+        if isinstance(other, ConstantTrend):
+            return self.offset == other.offset
+        else:
+            return False
+
+
+class NoTrend(ConstantTrend):
+    """
+    A class that is the default trend: No trend, adding an offset of zero.
+    """
+    def __init__(self, shape: tuple[int] | "Signal"):
+        super().__init__(0, shape)
 
 
 
@@ -79,11 +87,10 @@ class BaseNoise:
     This class builds the base for a Noise signal. Noise will be always additive and is assigned to every
     Signal. It has to have a render function to be called when compiling the signal.
     """
-    def __init__(self, render_function: typing.Callable):
-        self.render_function = render_function
 
-    def render(self, *args, **kwargs) -> np.ndarray:
-        return self.render_function(*args, **kwargs)
+    @abc.abstractmethod
+    def render(self) -> np.ndarray:
+        return np.ndarray([])
 
     @property
     @abc.abstractmethod
@@ -100,6 +107,7 @@ class NoNoise:
         # save the intended shape
         self.shape_var = shape
         self.offset = 0.0
+        self.constant = True
 
     def render(self, *args, **kwargs) -> float:
         return self.offset
@@ -172,12 +180,21 @@ class Signal:
         # compare the two oscillations for equality, they are equal if trend and oscillation are the same
         return self.oscillation == other.oscillation and self.trend == other.trend
 
+    @staticmethod
+    def translate_shape(shape: tuple | "Signal") -> tuple:
+        if isinstance(shape, tuple):
+            return shape
+        elif isinstance(shape, Signal):
+            return shape.shape
+        else:
+            raise ValueError(f"Shape must be of class Signal or Tuple. Not: {type(shape)}.")
+
 
 class ChangeSignal:
     """
     This is the class for a Change signal. The change signal is always a concatenation of several Signals.
     """
-    def __init__(self, signals: list[Signal]):
+    def __init__(self, signals: list[Signal], trend: BaseTrend = None, noise: BaseNoise = None):
 
         # check whether all signals have a dimension of one
         if any(len(signal.shape) != 1 for signal in signals):
@@ -189,6 +206,24 @@ class ChangeSignal:
 
         # save the variables
         self.signals = signals
+
+        # check for the trend (after we save the signals, as we need their shape to check)
+        if trend is None:
+            trend = NoTrend(self.shape)
+        else:
+            if trend.shape != self.shape:
+                raise ValueError(f"Shape of trend and change signal must be the same. Change Signal: {self.shape},"
+                                 f"Trend: {trend.shape}.")
+        self.trend = trend
+
+        # check for the noise (after we save the signals, as we need their shape to check)
+        if noise is None:
+            noise = NoNoise(self.shape)
+        else:
+            if noise.shape != self.shape:
+                raise ValueError(f"Shape of trend and change signal must be the same. Change Signal: {self.shape},"
+                                 f"Trend: {noise.shape}.")
+        self.noise = noise
 
         # infer the change points by using the shapes, by definition the change points
         # are always the first sample after a signal has ended
@@ -204,7 +239,9 @@ class ChangeSignal:
 
 
     def render(self):
-        return np.concatenate([signal.render() for signal in self.signals], axis=0)
+        return (np.concatenate([signal.render() for signal in self.signals], axis=0)
+                + self.trend.render()
+                + self.noise.render())
 
     @property
     def shape(self) -> tuple[int,]:
