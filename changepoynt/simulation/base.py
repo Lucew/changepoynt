@@ -11,6 +11,13 @@ class BaseOscillation:
     final signal.
     """
 
+    def __init__(self, tolerance: float):
+
+        # save the tolerance that has to be used for equality checking
+        if tolerance < 0:
+            raise ValueError(f"Tolerance must be between 0 and 1. Currently: {tolerance}")
+        self.tolerance = tolerance
+
     @abc.abstractmethod
     def render(self, *args, **kwargs) -> np.ndarray:
         return np.ndarray([])
@@ -30,6 +37,10 @@ class BaseTrend:
     This class builds the base for a Trend. For example, this can be constant, a line with a slope. The trend
     is always additive.
     """
+    def __init__(self, tolerance: float):
+        if tolerance < 0:
+            raise ValueError(f"Tolerance must greater than zero. Currently: {tolerance}")
+        self.tolerance = tolerance
 
     @abc.abstractmethod
     def render(self, *args, **kwargs) -> np.ndarray:
@@ -47,7 +58,8 @@ class BaseTrend:
 
 class ConstantTrend(BaseTrend):
 
-    def __init__(self, offset: float, shape: tuple[int] | "Signal"):
+    def __init__(self, offset: float, shape: typing.Union[tuple[int], "Signal"], tolerance: float):
+        super().__init__(tolerance)
 
         # save the variables
         self.offset = offset
@@ -68,7 +80,7 @@ class ConstantTrend(BaseTrend):
 
         # check whether the other one is also a constant trend (NoTrend or ConstantOffset)
         if isinstance(other, ConstantTrend):
-            return self.offset == other.offset
+            return  abs(other.offset/self.offset-1) < self.tolerance
         else:
             return False
 
@@ -77,8 +89,8 @@ class NoTrend(ConstantTrend):
     """
     A class that is the default trend: No trend, adding an offset of zero.
     """
-    def __init__(self, shape: tuple[int] | "Signal"):
-        super().__init__(0, shape)
+    def __init__(self, shape: typing.Union[tuple[int], "Signal"], tolerance: float = 0.05):
+        super().__init__(0, shape, tolerance)
 
 
 
@@ -181,7 +193,7 @@ class Signal:
         return self.oscillation == other.oscillation and self.trend == other.trend
 
     @staticmethod
-    def translate_shape(shape: tuple | "Signal") -> tuple:
+    def translate_shape(shape: typing.Union[tuple, "Signal"]) -> tuple:
         if isinstance(shape, tuple):
             return shape
         elif isinstance(shape, Signal):
