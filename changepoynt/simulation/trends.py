@@ -9,15 +9,16 @@ class ConstantOffset(base.ConstantTrend):
     """
     Adding a constant to the signal.
     """
-    def __init__(self, offset: float, shape: tuple[int] | base.Signal):
-        super().__init__(offset, shape)
+    def __init__(self, offset: float, shape: tuple[int] | base.Signal, tolerance: float = 0.05):
+        super().__init__(offset, shape, tolerance)
         if offset == 0:
             raise ValueError("Constant offset cannot be 0. Use NoTrend class instead.")
 
 
 class LinearTrend(base.BaseTrend):
 
-    def __init__(self, offset: float, slope: float, shape: tuple[int] | base.Signal):
+    def __init__(self, offset: float, slope: float, shape: tuple[int] | base.Signal, tolerance: float = 0.1):
+        super().__init__(tolerance)
 
         # save the variables
         self.shape_tuple = base.Signal.translate_shape(shape)
@@ -36,7 +37,19 @@ class LinearTrend(base.BaseTrend):
         # if the other one is also a trend, we have to check whether they would attach to each other
         # without a problem
         if isinstance(other, LinearTrend):
-            return self.offset + self.slope * (other.shape[0]-1) == other.offset and self.slope == other.slope
+
+            # compute where the current slope ends
+            self_end_value = self.offset + self.slope * (other.shape[0]-1)
+
+            # check whether the end points and current points are completely different
+            attachment_point_equal = abs(other.offset-self_end_value) < self.tolerance
+
+            # check whether the slopes are different
+            slope_equal = abs(self.slope - other.slope) < self.tolerance
+            return attachment_point_equal and slope_equal
+        else:
+            return False
+
 
 
 
