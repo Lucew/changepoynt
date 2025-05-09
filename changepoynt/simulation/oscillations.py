@@ -5,7 +5,6 @@ import scipy.special as spspec
 import base
 
 # TODO: line. parameters: None. We will use the trend for further modifications
-# TODO: rectangle pulse
 # TODO: saw-tooth pulse
 # TODO: ecg? but this introduces other dependencies
 # TODO: signal from csv (equality, or as trend?)
@@ -140,11 +139,11 @@ class SquareOscillation(base.BaseOscillation):
         self.periods = periods
         self.duty = duty
 
-        # check that each period contains at least 5 samples
+        # check that each period contains at least 6 samples
         if periods is None:
-            self.periods = self.length//5
-        if self.length < self.periods*5:
-            raise ValueError("We require at least 5 samples per period")
+            self.periods = self.length//6
+        if self.length < self.periods*6:
+            raise ValueError("We require at least 6 samples per period")
 
         # check that the duty is between zero and one
         if self.duty < 0 or self.duty > 1:
@@ -163,6 +162,59 @@ class SquareOscillation(base.BaseOscillation):
         output[0] = 0
         output[-1] = 0
         return output
+
+    def __eq__(self, other):
+
+        # check whether the other series is of the same class
+        # TODO: What about diric that might be similar?
+        if isinstance(other, type(self)):
+
+            # compute how many samples per period both have
+            frequency_self = self.length/self.periods
+            frequency_other = other.length/other.periods
+
+            # check for equality with tolerance
+            frequency_equal = abs(frequency_other-frequency_self) < self.tolerance
+            amplitude_equal = abs(other.amplitude-self.amplitude) < self.tolerance
+            return frequency_equal and amplitude_equal
+        else:
+            return False
+
+
+class SawtoothOscillation(base.BaseOscillation):
+
+    def __init__(self, length: int , periods: int = None, width: float = 0.5, amplitude: float = 1.0,
+                 tolerance: float = 1.0):
+        super().__init__(tolerance)
+
+        # save the variables
+        self.length = length
+        if self.length < 100:
+            raise ValueError("length must be at least 100.")
+        self.amplitude = amplitude
+        self.periods = periods
+        self.width = width
+
+        # check that each period contains at least 6 samples
+        if periods is None:
+            self.periods = self.length//6
+        if self.length < self.periods*6:
+            raise ValueError("We require at least 6 samples per period")
+
+        # check that the duty is between zero and one
+        if self.width < 0 or self.width > 1:
+            raise ValueError(f"width must be between 0 and 1. Currently it is: {self.width}.")
+
+    @property
+    def shape(self) -> tuple[int,]:
+        return (self.length,)
+
+    def render(self):
+        # start at -1 and end at -1 (half of a period multiplied with duty)
+        x = np.linspace(np.pi*self.width, self.periods * np.pi*2 + self.width*np.pi, self.length)
+
+        # elevate to oscillate between zero and one and multiple with amplitude
+        return self.amplitude*spsig.sawtooth(x, self.width)
 
     def __eq__(self, other):
 
@@ -211,6 +263,16 @@ if __name__ == "__main__":
     plt.plot(square1.render())
     plt.plot(square2.render())
     func = square1.render()
+    print(func[0], func[-1])  # should be zero
+
+    # check the sawtooth function
+    plt.figure()
+    sawtooth1 = SawtoothOscillation(length=1000, periods=10, width=1)
+    sawtooth2 = SawtoothOscillation(length=1000, periods=5)
+    print(sawtooth1 == sawtooth2, sawtooth2 == sawtooth1)
+    plt.plot(sawtooth1.render())
+    plt.plot(sawtooth2.render())
+    func = sawtooth1.render()
     print(func[0], func[-1])  # should be zero
 
     plt.show()
