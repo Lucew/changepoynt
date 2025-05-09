@@ -10,7 +10,9 @@ import base
 
 
 class NoOscillation(base.BaseOscillation):
-
+    """
+    This will implement a simple line. Offset will be done using a trend.
+    """
     def __init__(self, length: int):
         super().__init__(0)
         self.length = length
