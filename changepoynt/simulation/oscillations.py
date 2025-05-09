@@ -126,13 +126,69 @@ class DirichletOscillation(base.BaseOscillation):
             return False
 
 
+class SquareOscillation(base.BaseOscillation):
+
+    def __init__(self, length: int , periods: int = None, duty: float = 0.5, amplitude: float = 1.0,
+                 tolerance: float = 1.0):
+        super().__init__(tolerance)
+
+        # save the variables
+        self.length = length
+        if self.length < 100:
+            raise ValueError("length must be at least 100.")
+        self.amplitude = amplitude
+        self.periods = periods
+        self.duty = duty
+
+        # check that each period contains at least 5 samples
+        if periods is None:
+            self.periods = self.length//5
+        if self.length < self.periods*5:
+            raise ValueError("We require at least 5 samples per period")
+
+        # check that the duty is between zero and one
+        if self.duty < 0 or self.duty > 1:
+            raise ValueError(f"duty must be between 0 and 1. Currently it is: {self.duty}.")
+
+    @property
+    def shape(self) -> tuple[int,]:
+        return (self.length,)
+
+    def render(self):
+        # start at -1 and end at -1 (half of a period multiplied with duty)
+        x = np.linspace(0, self.periods * np.pi*2, self.length)
+
+        # elevate to oscillate between zero and one and multiple with amplitude
+        output = self.amplitude*spsig.square(x, self.duty)
+        output[0] = 0
+        output[-1] = 0
+        return output
+
+    def __eq__(self, other):
+
+        # check whether the other series is of the same class
+        # TODO: What about diric that might be similar?
+        if isinstance(other, type(self)):
+
+            # compute how many samples per period both have
+            frequency_self = self.length/self.periods
+            frequency_other = other.length/other.periods
+
+            # check for equality with tolerance
+            frequency_equal = abs(frequency_other-frequency_self) < self.tolerance
+            amplitude_equal = abs(other.amplitude-self.amplitude) < self.tolerance
+            return frequency_equal and amplitude_equal
+        else:
+            return False
+
+
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
     # check the dirichlet function
     plt.figure()
-    diric1 = DirichletFunction(length=500, periods=10, periodicity=5)
-    diric2 = DirichletFunction(length=1000, periods=5, periodicity=5)
+    diric1 = DirichletOscillation(length=500, periods=10, periodicity=5)
+    diric2 = DirichletOscillation(length=1000, periods=5, periodicity=5)
     print(diric1 == diric2, diric2==diric1)
     plt.plot(diric1.render())
     func = diric1.render()
@@ -140,12 +196,21 @@ if __name__ == "__main__":
 
     # check the sine function
     plt.figure()
-    sine1 = SineFunction(length=500, periods=10)
-    sine2 = SineFunction(length=1000, periods=5)
+    sine1 = SineOscillation(length=500, periods=10)
+    sine2 = SineOscillation(length=1000, periods=5)
     print(sine1 == sine2, sine2 == sine1)
     plt.plot(sine1.render())
-    print(np.sin(2*np.pi))
     func = sine1.render()
+    print(func[0], func[-1])  # should be zero
+
+    # check the square function
+    plt.figure()
+    square1 = SquareOscillation(length=1000, periods=10)
+    square2 = SquareOscillation(length=1000, periods=5)
+    print(square1 == square2, square2 == square1)
+    plt.plot(square1.render())
+    plt.plot(square2.render())
+    func = square1.render()
     print(func[0], func[-1])  # should be zero
 
     plt.show()
