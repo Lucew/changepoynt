@@ -1,105 +1,230 @@
 import typing
 import abc
+import warnings
 
 import numpy as np
 
+# TODO: enable custom limit error messages when registering a parameter
+class SignalPart:
+    """
+    This class is the highest level interface for all elements that will end up in a change signal. It takes care of
+    checking parameters and keeping track of modifiable parameters.
 
-class BaseOscillation:
+    The modifiable parameters are important as they will be used to randomly assign changes.
+    """
+    def __init__(self, length: int, minimum_length: int = 100):
+
+        # create a dictionary, where we save limits of the variables
+        self.__parameter_limits = dict()
+        self.__parameter_tolerances = dict()
+
+        # create a dictionary for deactivated modifiable parameters
+        self.__modifiable_parameters = set()
+
+        # save the length
+        length = Signal.translate_length(length)
+        if length < minimum_length:
+            raise ValueError(f'Length is too short: {length} < {minimum_length}.')
+        self.length = length
+
+    @property
+    def shape(self) -> tuple[int,]:
+        return (self.length,)
+
+    def check_and_get_parameter(self, parameter_name: str):
+        # get the value from the object
+        value = getattr(self, parameter_name, None)
+        if value is None:
+            raise AttributeError(f"No parameter {parameter_name} defined in the current object.")
+        return value
+
+    def check_and_get_parameter_limit(self, parameter_name: str):
+        if parameter_name in self.__parameter_limits:
+            return self.__parameter_limits[parameter_name]
+        else:
+            raise AttributeError(f"parameter {parameter_name} has no defined limit in the current object.")
+
+    def check_and_get_parameter_tolerance(self, parameter_name: str):
+        if parameter_name in self.__parameter_tolerances:
+            return self.__parameter_tolerances[parameter_name]
+        else:
+            raise AttributeError(f"parameter {parameter_name} has no defined tolerance in the current object.")
+
+    def get_parameter(self, parameter_name: str):
+        return self.check_and_get_parameter(parameter_name)
+
+    def get_limit(self, parameter_name: str):
+        return self.check_and_get_parameter_limit(parameter_name)
+
+    def get_tolerance(self, parameter_name: str):
+        return self.check_and_get_parameter_tolerance(parameter_name)
+
+    def is_modifiable(self, parameter_name: str):
+        if parameter_name not in self.__modifiable_parameters:
+            raise AttributeError(f"Parameter {parameter_name} is not modifiable.")
+        return True
+
+    def get_modifiable_limit(self, parameter_name: str):
+        self.is_modifiable(parameter_name)
+        return self.get_limit(parameter_name)
+
+    def get_modifiable_tolerance(self, parameter_name: str):
+        self.is_modifiable(parameter_name)
+        return self.get_tolerance(parameter_name)
+
+    @property
+    def modifiable_parameters(self) -> list[str,]:
+        return list(self.__modifiable_parameters)
+
+    @property
+    def parameters(self) -> list[str,]:
+        return list(self.__modifiable_parameters)
+
+    def deactivate_modifiable_parameters(self, parameter_name: str):
+        self.check_and_get_parameter(parameter_name)
+        self.__modifiable_parameters.discard(parameter_name)
+
+    def activate_modifiable_parameters(self, parameter_name: str):
+        self.check_and_get_parameter(parameter_name)
+        self.__modifiable_parameters.add(parameter_name)
+
+    def register_modifiable_parameter(self, parameter_name: str,
+                                      limit: tuple[typing.Union[float, int], typing.Union[float, int]],
+                                      tolerance: float):
+
+        # register the parameter
+        self.register_parameter(parameter_name, limit, tolerance)
+
+        # register parameter as modifiable
+        self.__modifiable_parameters.add(parameter_name)
+
+    def register_parameter(self, parameter_name: str, limit: tuple[typing.Union[float, int], typing.Union[float, int]],
+                           tolerance: float):
+
+        # get the current parameter value (and check that it exists)
+        self.check_and_get_parameter(parameter_name)
+
+        # check that we not already have this parameter registered
+        if parameter_name in self.__parameter_limits:
+            warnings.warn(f"Parameter {parameter_name} has already been registered in the current object (lim).")
+
+        # check that the limit is valid
+        if limit[0] > limit[1]:
+            raise AttributeError(f"Limit has to from small to big. Current limit: {limit}.")
+
+        # register the limit for the parameter
+        self.__parameter_limits[parameter_name] = limit
+
+        # check that we do not have a tolerance for this parameter
+        if parameter_name in self.__parameter_tolerances:
+            warnings.warn(f"Parameter {parameter_name} has already been registered in the current object (tol).")
+
+        # check that the tolerance is valid
+        if tolerance < 0:
+            raise AttributeError(f"Tolerance hast to be >= 0. Current tolerance: {tolerance}.")
+
+        # register the tolerance for this parameter
+        self.__parameter_tolerances[parameter_name] = tolerance
+
+        # check the value for the limit
+        self.check_value_in_limits(parameter_name)
+
+    def check_value_in_limits(self, parameter_name: str) -> bool:
+
+        # get the limit from the object
+        limit = self.check_and_get_parameter_limit(parameter_name)
+
+        # get the value from the object
+        value = self.check_and_get_parameter(parameter_name)
+
+        # check whether the condition is fulfilled
+        if limit[0] <= value <= limit[1]:
+            return True
+
+        # throw error if outside of definition
+        else:
+            error_message = getattr(self, f"{parameter_name}_limit_error_message", None)
+            if error_message is None:
+                error_message = f"{parameter_name} must be between {limit[0]} and {limit[1]}. Currently it is: {value}."
+            raise ValueError(error_message)
+
+    def __eq__(self, other):
+        print(f'I am {type(self).__name__} and am compared to {type(other).__name__}.')
+        # check if both signals have the same class
+        if isinstance(other, type(self)):
+            return all(abs(self.get_parameter(name)-other.get_parameter(name)) < self.get_limit(name)
+                       for name in self.parameters)
+        return False
+
+    def __sub__(self, other):
+        # check if both signals have the same class
+        if isinstance(other, type(self)):
+            return {name: self.get_parameter(name)-other.get_parameter(name) for name in self.parameters}
+        return False
+
+
+class BaseOscillation(SignalPart):
     """
     This class builds the base for an Oscillation, which we see as a base signal. For example, this can be constant,
     a sine, or a triangle function. Every Oscillation has to have a render function to be called when compiling the
     final signal.
     """
 
-    def __init__(self, length: int, tolerance: float):
-
-        # save the tolerance that has to be used for equality checking
-        if tolerance < 0:
-            raise ValueError(f"Tolerance must be between 0 and 1. Currently: {tolerance}.")
-        self.tolerance = tolerance
-
-        # save the length and make sure it has a minimum length
-        minimum_length = 100
-        if length <= minimum_length:
-            raise ValueError(f"Length must be greater than {minimum_length}. Currently: {length}.")
-        self.length = length
+    def __init__(self, length: int):
+        super().__init__(length)
 
     @abc.abstractmethod
     def render(self, *args, **kwargs) -> np.ndarray:
         return np.ndarray([])
 
-    @property
-    def shape(self) -> tuple[int,]:
-        return (self.length,)
 
-    @abc.abstractmethod
-    def __eq__(self, other: object) -> bool:
-        pass
+class NoOscillation(BaseOscillation):
+    """
+    This will implement a simple line. Offset will be done using a trend.
+    """
+    def __init__(self, length: int):
+        super().__init__(length)
+
+    def render(self) -> int:
+        return 0
 
 
-class BaseTrend:
+class BaseTrend(SignalPart):
     """
     This class builds the base for a Trend. For example, this can be constant, a line with a slope. The trend
     is always additive.
     """
-    def __init__(self, tolerance: float):
-        if tolerance < 0:
-            raise ValueError(f"Tolerance must greater than zero. Currently: {tolerance}")
-        self.tolerance = tolerance
+    def __init__(self, length: int):
+        super().__init__(length)
 
     @abc.abstractmethod
     def render(self, *args, **kwargs) -> np.ndarray:
         return np.ndarray([])
 
-    @property
-    @abc.abstractmethod
-    def shape(self) -> tuple:
-        return ()
-
-    @abc.abstractmethod
-    def __eq__(self, other: object) -> bool:
-        pass
-
 
 class ConstantTrend(BaseTrend):
 
-    def __init__(self, offset: float, shape: typing.Union[tuple[int], "Signal"], tolerance: float):
-        super().__init__(tolerance)
+    def __init__(self, offset: float, length: int, tolerance: float):
+        super().__init__(length)
 
         # save the variables
         self.offset = offset
-        self.shape_tuple = Signal.translate_shape(shape)
+        self.register_modifiable_parameter('offset', (-float('inf'), float('inf')), tolerance)
 
     def render(self):
         return self.offset
-
-    @property
-    def shape(self):
-        return self.shape_tuple
-
-    def __eq__(self, other: object) -> bool:
-
-        # check that we only are compared with other trends
-        if not isinstance(other, BaseTrend):
-            raise TypeError(f"Cannot compare class {type(other)} with a Trend.")
-
-        # check whether the other one is also a constant trend (NoTrend or ConstantOffset)
-        if isinstance(other, ConstantTrend):
-            return  abs(other.offset/self.offset-1) < self.tolerance
-        else:
-            return False
 
 
 class NoTrend(ConstantTrend):
     """
     A class that is the default trend: No trend, adding an offset of zero.
     """
-    def __init__(self, shape: typing.Union[tuple[int], "Signal"], tolerance: float = 0.05):
-        super().__init__(0, shape, tolerance)
+    def __init__(self, length: typing.Union[int, "Signal"], tolerance: float = 0.01):
+        super().__init__(0, length, tolerance)
 
 
 
-class BaseNoise:
+class BaseNoise(SignalPart):
     """
     This class builds the base for a Noise signal. Noise will be always additive and is assigned to every
     Signal. It has to have a render function to be called when compiling the signal.
@@ -109,38 +234,17 @@ class BaseNoise:
     def render(self) -> np.ndarray:
         return np.ndarray([])
 
-    @property
-    @abc.abstractmethod
-    def shape(self) -> tuple:
-        return ()
 
-
-class NoNoise:
+class NoNoise(BaseNoise):
     """
     This class is the default if no noise is specified. It adds no noise to the signal.
     """
 
-    def __init__(self, shape: tuple[int]):
-        # save the intended shape
-        self.shape_var = shape
-        self.offset = 0.0
-        self.constant = True
+    def __init__(self, length: int):
+        super().__init__(length)
 
     def render(self, *args, **kwargs) -> float:
-        return self.offset
-
-    @property
-    def shape(self) -> tuple:
-        return self.shape_var
-
-    def __eq__(self, other: object) -> bool:
-        # check that we are compared to another BaseTrend
-        if not isinstance(other, BaseNoise):
-            raise TypeError(f'Cannot compare {type(other)} with {type(self)}.')
-
-        # check whether the other is a different trend then no equality
-        # if other is NoTrend, we have equality
-        return isinstance(other, type(self))
+        return 0
 
 
 class Signal:
@@ -149,11 +253,14 @@ class Signal:
     """
     def __init__(self, oscillation: BaseOscillation, noise: BaseNoise = None, trend: BaseTrend = None):
 
+        if len(oscillation.shape) != 1:
+            raise AttributeError(f"Oscillation has to be a 1D array. Currently: {len(oscillation.shape)}.")
+
         # create the defaults if necessary
         if noise is None:
-            noise = NoNoise(oscillation.shape)
+            noise = NoNoise(oscillation.shape[0])
         if trend is None:
-            trend = NoTrend(oscillation.shape)
+            trend = NoTrend(oscillation.shape[0])
 
         # check for the correct types
         if not isinstance(oscillation, BaseOscillation):
@@ -170,10 +277,9 @@ class Signal:
         if oscillation.shape != trend.shape:
             raise ValueError(f"Shape of signal and trend must be the same. "
                              f"Currently: Signal shape {oscillation.shape} and trend shape {noise.shape}.")
-        if len(oscillation.shape) != 1 or len(noise.shape) != 1 or len(trend.shape) != 1:
-            raise ValueError(f"Signal and Noise have to have 1 dimension. "
-                             f"Currently: Oscillation shape {len(oscillation.shape)},  Noise shape {noise.shape}, "
-                             f"and trend shape {trend.shape}.")
+        if len(noise.shape) != 1 or len(trend.shape) != 1:
+            raise ValueError(f"Trand and Noise have to have 1 dimension. "
+                             f"Currently: Noise shape {noise.shape} and trend shape {trend.shape}.")
 
         # save the noise and the signal
         self.oscillation = oscillation
@@ -198,13 +304,13 @@ class Signal:
         return self.oscillation == other.oscillation and self.trend == other.trend
 
     @staticmethod
-    def translate_shape(shape: typing.Union[tuple, "Signal"]) -> tuple:
-        if isinstance(shape, tuple):
-            return shape
-        elif isinstance(shape, Signal):
-            return shape.shape
+    def translate_length(length: typing.Union[int, "Signal"]) -> int:
+        if isinstance(length, int):
+            return length
+        elif isinstance(length, Signal):
+            return length.shape[0]
         else:
-            raise ValueError(f"Shape must be of class Signal or Tuple. Not: {type(shape)}.")
+            raise ValueError(f"Length must be of class Signal or Tuple. Not: {type(length)}.")
 
 
 class ChangeSignal:

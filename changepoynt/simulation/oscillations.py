@@ -4,43 +4,28 @@ import scipy.special as spspec
 
 import base
 
-# TODO: line. parameters: None. We will use the trend for further modifications
-# TODO: ecg? but this introduces other dependencies
-# TODO: check change point papers for what they simulate
-
-
-class NoOscillation(base.BaseOscillation):
-    """
-    This will implement a simple line. Offset will be done using a trend.
-    """
-    def __init__(self, length: int):
-        super().__init__(length, 0)
-        self.length = length
-
-
-    def render(self) -> np.ndarray:
-        return np.zeros(self.length)
-
-    def __eq__(self, other):
-
-        # check whether the other series is of the same class
-        return isinstance(other, type(self))
-
+# TODO: rewrite everything to register parameters
 
 class SineOscillation(base.BaseOscillation):
 
     def __init__(self, length: int , periods: int = None, amplitude: float = 1.0, tolerance: float = 1.0):
-        super().__init__(length, tolerance)
+        super().__init__(length)
 
         # save the variables
         self.amplitude = amplitude
         self.periods = periods
 
+        # create a custom error string for the periods
+        min_sample = 5
+        error_str = (f"We require at least {min_sample} samples per period (in total: {self.limit_length[0]}). "
+                     f"Currently: {self.length}.")
+        self.periods_limit_error = error_str
+
         # check that each period contains at least 5 samples
         if periods is None:
-            self.periods = self.length//5
-        if self.length < self.periods*5:
-            raise ValueError("We require at least 5 samples per period")
+            self.periods = self.length // min_sample
+
+
 
     def render(self):
         return self.amplitude*np.sin(np.linspace(0, self.periods * np.pi*2, self.length))
@@ -73,17 +58,18 @@ class DirichletOscillation(base.BaseOscillation):
         self.periodicity = periodicity
         self.amplitude = amplitude
 
-        # set the default value for the periods
+        # check that each period contains at least 10 samples
+        min_sample = 10
         if periods is None:
-            self.periods = self.length//10
+            self.periods = self.length // min_sample
+        self.limit_length = (self.periods * min_sample, float('inf'))
+        error_str = (f"We require at least {min_sample} samples per period (in total: {self.limit_length[0]}). "
+                     f"Currently: {self.length}.")
+        self.check_value(self.length, 'length', error_str)
 
-        # check the correct values
-        if self.length < self.periods * 10:
-            raise ValueError(
-                f"length ({self.length}) must be at least 10 samples per period: "
-                f"min required {self.periods * 10}.")
-        if self.periodicity < 1:
-            raise ValueError("periodicity must be a positive integer.")
+        # check the periodicity
+        self.limit_periodicity = (1, float('inf'))
+        self.check_value(self.periodicity, 'periodicity')
 
         # Determine fundamental period based on periodicity
         if self.periodicity&1 == 0:
@@ -138,14 +124,17 @@ class SquareOscillation(base.BaseOscillation):
         self.duty = duty
 
         # check that each period contains at least 6 samples
+        min_sample = 6
         if periods is None:
-            self.periods = self.length//6
-        if self.length < self.periods*6:
-            raise ValueError("We require at least 6 samples per period")
+            self.periods = self.length // min_sample
+        self.limit_length = (self.periods * min_sample, float('inf'))
+        error_str = (f"We require at least {min_sample} samples per period (in total: {self.limit_length[0]}). "
+                     f"Currently: {self.length}.")
+        self.check_value(self.length, 'length', error_str)
 
         # check that the duty is between zero and one
-        if self.duty < 0 or self.duty > 1:
-            raise ValueError(f"duty must be between 0 and 1. Currently it is: {self.duty}.")
+        self.limit_duty = (0, 1)
+        self.check_value(self.duty, 'duty')
 
     def render(self):
         # start at -1 and end at -1 (half of a period multiplied with duty)

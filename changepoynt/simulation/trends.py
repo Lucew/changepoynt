@@ -1,5 +1,7 @@
 # TODO: specify trends (linear, offset, maybe even signals)
 # TODO: take care the trends are always different to NoTrends(offset of zero)
+
+# TODO: rewrite everything to register parameters
 import numpy as np
 
 import base

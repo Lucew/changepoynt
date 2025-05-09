@@ -4,7 +4,7 @@ import numpy as np
 
 import base
 
-
+# TODO: rewrite everything to register parameters
 class GaussianNoise(base.BaseNoise):
 
     def __init__(self, mean: float, std: float, shape: tuple | base.Signal, random_seed: int = None):
