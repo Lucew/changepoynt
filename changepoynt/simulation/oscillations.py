@@ -5,10 +5,28 @@ import scipy.special as spspec
 import base
 
 # TODO: line. parameters: None. We will use the trend for further modifications
-# TODO: saw-tooth pulse
 # TODO: ecg? but this introduces other dependencies
-# TODO: signal from csv (equality, or as trend?)
 # TODO: check change point papers for what they simulate
+
+
+class NoOscillation(base.BaseOscillation):
+
+    def __init__(self, length: int):
+        super().__init__(0)
+        self.length = length
+
+
+    def render(self) -> np.ndarray:
+        return np.zeros(self.length)
+
+    @property
+    def shape(self) -> tuple[int,]:
+        return (self.length,)
+
+    def __eq__(self, other):
+
+        # check whether the other series is of the same class
+        return isinstance(other, type(self))
 
 
 class SineOscillation(base.BaseOscillation):
@@ -274,5 +292,7 @@ if __name__ == "__main__":
     plt.plot(sawtooth2.render())
     func = sawtooth1.render()
     print(func[0], func[-1])  # should be zero
+
+    print(sawtooth1 == square1)
 
     plt.show()
