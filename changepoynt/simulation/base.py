@@ -11,21 +11,26 @@ class BaseOscillation:
     final signal.
     """
 
-    def __init__(self, tolerance: float):
+    def __init__(self, length: int, tolerance: float):
 
         # save the tolerance that has to be used for equality checking
         if tolerance < 0:
-            raise ValueError(f"Tolerance must be between 0 and 1. Currently: {tolerance}")
+            raise ValueError(f"Tolerance must be between 0 and 1. Currently: {tolerance}.")
         self.tolerance = tolerance
+
+        # save the length and make sure it has a minimum length
+        minimum_length = 100
+        if length <= minimum_length:
+            raise ValueError(f"Length must be greater than {minimum_length}. Currently: {length}.")
+        self.length = length
 
     @abc.abstractmethod
     def render(self, *args, **kwargs) -> np.ndarray:
         return np.ndarray([])
 
     @property
-    @abc.abstractmethod
-    def shape(self) -> tuple:
-        return ()
+    def shape(self) -> tuple[int,]:
+        return (self.length,)
 
     @abc.abstractmethod
     def __eq__(self, other: object) -> bool:

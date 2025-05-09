@@ -14,16 +14,12 @@ class NoOscillation(base.BaseOscillation):
     This will implement a simple line. Offset will be done using a trend.
     """
     def __init__(self, length: int):
-        super().__init__(0)
+        super().__init__(length, 0)
         self.length = length
 
 
     def render(self) -> np.ndarray:
         return np.zeros(self.length)
-
-    @property
-    def shape(self) -> tuple[int,]:
-        return (self.length,)
 
     def __eq__(self, other):
 
@@ -34,12 +30,9 @@ class NoOscillation(base.BaseOscillation):
 class SineOscillation(base.BaseOscillation):
 
     def __init__(self, length: int , periods: int = None, amplitude: float = 1.0, tolerance: float = 1.0):
-        super().__init__(tolerance)
+        super().__init__(length, tolerance)
 
         # save the variables
-        self.length = length
-        if self.length < 100:
-            raise ValueError("length must be at least 100.")
         self.amplitude = amplitude
         self.periods = periods
 
@@ -48,11 +41,6 @@ class SineOscillation(base.BaseOscillation):
             self.periods = self.length//5
         if self.length < self.periods*5:
             raise ValueError("We require at least 5 samples per period")
-
-
-    @property
-    def shape(self) -> tuple[int,]:
-        return (self.length,)
 
     def render(self):
         return self.amplitude*np.sin(np.linspace(0, self.periods * np.pi*2, self.length))
@@ -79,11 +67,8 @@ class DirichletOscillation(base.BaseOscillation):
 
     def __init__(self, length: int, periods: int = None, periodicity: int = 5, amplitude: float = 1.0,
                  tolerance: float = 0.05):
-        super().__init__(tolerance)
+        super().__init__(length, tolerance)
 
-        self.length = length
-        if self.length < 100:
-            raise ValueError("length must be at least 100.")
         self.periods = periods
         self.periodicity = periodicity
         self.amplitude = amplitude
@@ -113,10 +98,6 @@ class DirichletOscillation(base.BaseOscillation):
 
         # Offset to the first zero crossing: x_zero = 2*pi/periodicity
         self.zero_offset = 2 * np.pi / self.periodicity
-
-    @property
-    def shape(self) -> tuple[int,]:
-        return (self.length,)
 
     def render(self):
         # Sample points from first zero crossing to last, inclusive
@@ -149,12 +130,9 @@ class SquareOscillation(base.BaseOscillation):
 
     def __init__(self, length: int , periods: int = None, duty: float = 0.5, amplitude: float = 1.0,
                  tolerance: float = 1.0):
-        super().__init__(tolerance)
+        super().__init__(length, tolerance)
 
         # save the variables
-        self.length = length
-        if self.length < 100:
-            raise ValueError("length must be at least 100.")
         self.amplitude = amplitude
         self.periods = periods
         self.duty = duty
@@ -168,10 +146,6 @@ class SquareOscillation(base.BaseOscillation):
         # check that the duty is between zero and one
         if self.duty < 0 or self.duty > 1:
             raise ValueError(f"duty must be between 0 and 1. Currently it is: {self.duty}.")
-
-    @property
-    def shape(self) -> tuple[int,]:
-        return (self.length,)
 
     def render(self):
         # start at -1 and end at -1 (half of a period multiplied with duty)
@@ -205,12 +179,9 @@ class SawtoothOscillation(base.BaseOscillation):
 
     def __init__(self, length: int , periods: int = None, width: float = 0.5, amplitude: float = 1.0,
                  tolerance: float = 1.0):
-        super().__init__(tolerance)
+        super().__init__(length, tolerance)
 
         # save the variables
-        self.length = length
-        if self.length < 100:
-            raise ValueError("length must be at least 100.")
         self.amplitude = amplitude
         self.periods = periods
         self.width = width
@@ -224,10 +195,6 @@ class SawtoothOscillation(base.BaseOscillation):
         # check that the duty is between zero and one
         if self.width < 0 or self.width > 1:
             raise ValueError(f"width must be between 0 and 1. Currently it is: {self.width}.")
-
-    @property
-    def shape(self) -> tuple[int,]:
-        return (self.length,)
 
     def render(self):
         # start at -1 and end at -1 (half of a period multiplied with duty)
