@@ -5,6 +5,8 @@ import warnings
 import numpy as np
 
 # TODO: enable custom limit error messages when registering a parameter
+# TODO: somehow test that all children of SignalPart which also have a render function can be initialized without specifying values
+# TODO: test that
 class SignalPart:
     """
     This class is the highest level interface for all elements that will end up in a change signal. It takes care of
@@ -21,6 +23,12 @@ class SignalPart:
         # create a dictionary for deactivated modifiable parameters
         self.__modifiable_parameters = set()
 
+        # create a dictionary for the parameter that have to be used for comparison
+        self.__comparison_parameters = set()
+
+        # create a dictionary for the limit error explanation
+        self.__limit_error_explanations = dict()
+
         # save the length
         length = Signal.translate_length(length)
         if length < minimum_length:
@@ -31,11 +39,17 @@ class SignalPart:
     def shape(self) -> tuple[int,]:
         return (self.length,)
 
+    @abc.abstractmethod
+    def render(self, *args, **kwargs) -> np.ndarray:
+        pass
+
     def check_and_get_parameter(self, parameter_name: str):
         # get the value from the object
         value = getattr(self, parameter_name, None)
         if value is None:
             raise AttributeError(f"No parameter {parameter_name} defined in the current object.")
+        if not (isinstance(value, int) or isinstance(value, float)):
+            raise TypeError(f"Parameter {parameter_name} must be a number.")
         return value
 
     def check_and_get_parameter_limit(self, parameter_name: str):
@@ -78,7 +92,7 @@ class SignalPart:
 
     @property
     def parameters(self) -> list[str,]:
-        return list(self.__modifiable_parameters)
+        return list(self.__parameter_limits.keys())
 
     def deactivate_modifiable_parameters(self, parameter_name: str):
         self.check_and_get_parameter(parameter_name)
@@ -88,18 +102,24 @@ class SignalPart:
         self.check_and_get_parameter(parameter_name)
         self.__modifiable_parameters.add(parameter_name)
 
-    def register_modifiable_parameter(self, parameter_name: str,
-                                      limit: tuple[typing.Union[float, int], typing.Union[float, int]],
-                                      tolerance: float):
+    def _register_parameter(self, parameter_name: str,
+                            limit: tuple[typing.Union[float, int], typing.Union[float, int]] = None,
+                            tolerance: float = None, modifiable: bool = False, used_for_comparison: bool = True,
+                            limit_error_explanation: str = ""):
+        """
+        This function allows to register parameters of a signal part. The parameters are used for:
+        - Comparisons when checking for equality
+        - Modifiable parameters can be used to randomly generate changes
 
-        # register the parameter
-        self.register_parameter(parameter_name, limit, tolerance)
-
-        # register parameter as modifiable
-        self.__modifiable_parameters.add(parameter_name)
-
-    def register_parameter(self, parameter_name: str, limit: tuple[typing.Union[float, int], typing.Union[float, int]],
-                           tolerance: float):
+        :param parameter_name: the name of the parameter. has to be the same name as defined in the signal part
+        :param limit: a minimum and maximum value (inclusive). default: (-inf, inf)
+        :param tolerance: the maximum absolute difference that still counts as equality between parameters. default: inf
+        :param modifiable: whether the parameter is can be modified to generate random signals. default: False
+        :param used_for_comparison: whether the parameter is used as a comparison. default: True
+        :param limit_error_explanation: optional explanation why a parameter has a limit. default: ""
+        :return: None
+        """
+        # check for existence of the parameter -------------------------------------------------------------------------
 
         # get the current parameter value (and check that it exists)
         self.check_and_get_parameter(parameter_name)
@@ -108,12 +128,35 @@ class SignalPart:
         if parameter_name in self.__parameter_limits:
             warnings.warn(f"Parameter {parameter_name} has already been registered in the current object (lim).")
 
+        # check whether the parameter is modifiable --------------------------------------------------------------------
+        if modifiable:
+            # register parameter as modifiable
+            self.__modifiable_parameters.add(parameter_name)
+
+        # take care of the limit ---------------------------------------------------------------------------------------
+
+        # make the default value
+        if limit is None:
+            limit = (-float('inf'), float('inf'))
+
         # check that the limit is valid
         if limit[0] > limit[1]:
             raise AttributeError(f"Limit has to from small to big. Current limit: {limit}.")
 
         # register the limit for the parameter
         self.__parameter_limits[parameter_name] = limit
+
+        # check the value for the limit
+        self.check_value_in_limits(parameter_name)
+
+        # save the explanations
+        self.__limit_error_explanations[parameter_name] = limit_error_explanation
+
+        # take care of the tolerance -----------------------------------------------------------------------------------
+
+        # make the default value
+        if tolerance is None:
+            tolerance = float('inf')
 
         # check that we do not have a tolerance for this parameter
         if parameter_name in self.__parameter_tolerances:
@@ -126,8 +169,9 @@ class SignalPart:
         # register the tolerance for this parameter
         self.__parameter_tolerances[parameter_name] = tolerance
 
-        # check the value for the limit
-        self.check_value_in_limits(parameter_name)
+        # register the parameter for comparison
+        if used_for_comparison:
+            self.__comparison_parameters.add(parameter_name)
 
     def check_value_in_limits(self, parameter_name: str) -> bool:
 
@@ -143,24 +187,51 @@ class SignalPart:
 
         # throw error if outside of definition
         else:
-            error_message = getattr(self, f"{parameter_name}_limit_error_message", None)
-            if error_message is None:
-                error_message = f"{parameter_name} must be between {limit[0]} and {limit[1]}. Currently it is: {value}."
+            error_message = (f"{parameter_name} must be between {limit[0]} and {limit[1]}. Currently it is: {value}. "
+                             f"{f'Explanation: {self.__limit_error_explanations[parameter_name]}' if self.__limit_error_explanations[parameter_name] else ''}")
             raise ValueError(error_message)
 
     def __eq__(self, other):
+        """
+        This function allows comparison of two different signal parts. Currently, it only compares signals
+        if they have the same class. For comparison, it uses the registered parameters with the tolerances.
+
+        :param other: the other object to compare with
+        :return: boolean
+        """
         print(f'I am {type(self).__name__} and am compared to {type(other).__name__}.')
         # check if both signals have the same class
         if isinstance(other, type(self)):
-            return all(abs(self.get_parameter(name)-other.get_parameter(name)) < self.get_limit(name)
-                       for name in self.parameters)
+            return all(abs(self.get_parameter(name)-other.get_parameter(name)) < self.get_tolerance(name)
+                       for name in self.__comparison_parameters)
         return False
 
     def __sub__(self, other):
+
+        """
+        This allows to subtract the registered parameters of two signal parts having the same class.
+
+        :param other: the other object to subtract from us
+        :return: boolean
+        """
+
         # check if both signals have the same class
         if isinstance(other, type(self)):
             return {name: self.get_parameter(name)-other.get_parameter(name) for name in self.parameters}
-        return False
+        else:
+            raise NotImplementedError(f"Cannot compare self object of class {type(self).__name__} "
+                                      f"to other object of class {type(other).__name__}.")
+
+    def __setattr__(self, key, value):
+        print(f'I am {type(self).__name__} and your are setting {key}={value}.')
+
+        # check whether the attribute is modifiable
+        if not key in self.__modifiable_parameters:
+            raise KeyError(f"Parameter {key} is not a modifiable parameter.")
+
+        # check whether the new value is within its limits
+        setattr(self, key, value)
+        self.check_value_in_limits(key)
 
 
 class BaseOscillation(SignalPart):
@@ -175,7 +246,7 @@ class BaseOscillation(SignalPart):
 
     @abc.abstractmethod
     def render(self, *args, **kwargs) -> np.ndarray:
-        return np.ndarray([])
+        pass
 
 
 class NoOscillation(BaseOscillation):
@@ -197,10 +268,6 @@ class BaseTrend(SignalPart):
     def __init__(self, length: int):
         super().__init__(length)
 
-    @abc.abstractmethod
-    def render(self, *args, **kwargs) -> np.ndarray:
-        return np.ndarray([])
-
 
 class ConstantTrend(BaseTrend):
 
@@ -209,7 +276,8 @@ class ConstantTrend(BaseTrend):
 
         # save the variables
         self.offset = offset
-        self.register_modifiable_parameter('offset', (-float('inf'), float('inf')), tolerance)
+        self._register_parameter('offset', limit=(-float('inf'), float('inf')), tolerance=tolerance,
+                                 modifiable=True)
 
     def render(self):
         return self.offset
@@ -232,7 +300,7 @@ class BaseNoise(SignalPart):
 
     @abc.abstractmethod
     def render(self) -> np.ndarray:
-        return np.ndarray([])
+        pass
 
 
 class NoNoise(BaseNoise):
@@ -332,7 +400,7 @@ class ChangeSignal:
 
         # check for the trend (after we save the signals, as we need their shape to check)
         if trend is None:
-            trend = NoTrend(self.shape)
+            trend = NoTrend(self.shape[0])
         else:
             if trend.shape != self.shape:
                 raise ValueError(f"Shape of trend and change signal must be the same. Change Signal: {self.shape},"
@@ -341,7 +409,7 @@ class ChangeSignal:
 
         # check for the noise (after we save the signals, as we need their shape to check)
         if noise is None:
-            noise = NoNoise(self.shape)
+            noise = NoNoise(self.shape[0])
         else:
             if noise.shape != self.shape:
                 raise ValueError(f"Shape of trend and change signal must be the same. Change Signal: {self.shape},"
@@ -409,3 +477,9 @@ class ChangeSignalMultivariate:
     @property
     def change_points(self) -> list[list[int]]:
         return self.change_points_list
+
+
+if __name__ == "__main__":
+    a = BaseOscillation(100)
+    b = a.render()
+    print(b is None)

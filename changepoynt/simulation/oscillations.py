@@ -8,68 +8,65 @@ import base
 
 class SineOscillation(base.BaseOscillation):
 
-    def __init__(self, length: int , periods: int = None, amplitude: float = 1.0, tolerance: float = 1.0):
+    def __init__(self, length: int = 100, periods: int = None, amplitude: float = 1.0, tolerance: float = 1.0):
         super().__init__(length)
 
-        # save the variables
+        # create and register the amplitude parameter
         self.amplitude = amplitude
-        self.periods = periods
+        self._register_parameter('amplitude', tolerance=tolerance, modifiable=True)
 
-        # create a custom error string for the periods
+        # calculate the minimum samples per period
         min_sample = 5
-        error_str = (f"We require at least {min_sample} samples per period (in total: {self.limit_length[0]}). "
-                     f"Currently: {self.length}.")
-        self.periods_limit_error = error_str
+        err_str = f"We require at least {min_sample} samples per period. Either specify less periods or greater length."
+        max_periods = self.length//min_sample
 
-        # check that each period contains at least 5 samples
+        # make a default value
         if periods is None:
-            self.periods = self.length // min_sample
+            self.periods = max_periods
 
+        # create and register the parameter
+        self.periods = periods
+        self._register_parameter('periods', limit=(1, max_periods), modifiable=True,
+                                 used_for_comparison=False, limit_error_explanation=err_str)
 
+        # create the frequency parameter for the comparison
+        self.frequency = self.length/self.periods
+        self._register_parameter('frequency', modifiable=False, used_for_comparison=True)
 
     def render(self):
         return self.amplitude*np.sin(np.linspace(0, self.periods * np.pi*2, self.length))
 
-    def __eq__(self, other):
-
-        # check whether the other series is of the same class
-        # TODO: What about diric that might be similar?
-        if isinstance(other, type(self)):
-
-            # compute how many samples per period both have
-            frequency_self = self.length/self.periods
-            frequency_other = other.length/other.periods
-
-            # check for equality with tolerance
-            frequency_equal = abs(frequency_other-frequency_self) < self.tolerance
-            amplitude_equal = abs(other.amplitude-self.amplitude) < self.tolerance
-            return frequency_equal and amplitude_equal
-        else:
-            return False
-
 
 class DirichletOscillation(base.BaseOscillation):
 
-    def __init__(self, length: int, periods: int = None, periodicity: int = 5, amplitude: float = 1.0,
+    def __init__(self, length: int = 100, periods: int = None, periodicity: int = 5, amplitude: float = 1.0,
                  tolerance: float = 0.05):
-        super().__init__(length, tolerance)
+        super().__init__(length)
 
-        self.periods = periods
+        # create and register the periodicity
         self.periodicity = periodicity
+        self._register_parameter('periodicity', limit=(1, float('inf')), modifiable=True,
+                                 used_for_comparison=True, tolerance=tolerance)
+
+        # create and register the amplitude
         self.amplitude = amplitude
+        self._register_parameter('amplitude', tolerance=tolerance, modifiable=True, used_for_comparison=True)
 
-        # check that each period contains at least 10 samples
+        # create the periodicity limit
         min_sample = 10
-        if periods is None:
-            self.periods = self.length // min_sample
-        self.limit_length = (self.periods * min_sample, float('inf'))
-        error_str = (f"We require at least {min_sample} samples per period (in total: {self.limit_length[0]}). "
-                     f"Currently: {self.length}.")
-        self.check_value(self.length, 'length', error_str)
+        error_str = f"We require at least {min_sample} samples per period."
+        max_periods = self.length//min_sample
 
-        # check the periodicity
-        self.limit_periodicity = (1, float('inf'))
-        self.check_value(self.periodicity, 'periodicity')
+        # create and register the period limit
+        if periods is None:
+            self.periods = max_periods
+        self.periods = periods
+        self._register_parameter('periods', limit=(1, max_periods), modifiable=True,
+                                 used_for_comparison=False, limit_error_explanation=error_str)
+
+        # create and register the frequency we need for comparison
+        self.frequency = self.length/self.periods
+        self._register_parameter('frequency', modifiable=False, used_for_comparison=True, tolerance=tolerance)
 
         # Determine fundamental period based on periodicity
         if self.periodicity&1 == 0:
@@ -92,49 +89,33 @@ class DirichletOscillation(base.BaseOscillation):
         x = np.linspace(start, end, num=self.length, endpoint=True)
         return spspec.diric(x, self.periodicity)*self.amplitude
 
-    def __eq__(self, other):
-
-        # check whether the other series is of the same class
-        # TODO: What about sinus that might be similar?
-        # TODO: What about phase differences?
-        if isinstance(other, type(self)):
-
-            # compute the frequencies
-            frequency_self = self.length / self.periods
-            frequency_other = other.length / other.periods
-
-            # check for equal frequencies, amplitudes, and periodicity
-            frequency_equal = abs(frequency_other - frequency_self) < self.tolerance
-            amplitude_equal = abs(other.amplitude - self.amplitude) < self.tolerance
-            periodicity_equal = abs(other.periodicity - other.periodicity) < self.tolerance
-            return frequency_equal and amplitude_equal and periodicity_equal
-        else:
-            return False
-
 
 class SquareOscillation(base.BaseOscillation):
 
-    def __init__(self, length: int , periods: int = None, duty: float = 0.5, amplitude: float = 1.0,
+    def __init__(self, length: int = 100, periods: int = None, duty: float = 0.5, amplitude: float = 1.0,
                  tolerance: float = 1.0):
-        super().__init__(length, tolerance)
+        super().__init__(length)
 
         # save the variables
         self.amplitude = amplitude
-        self.periods = periods
-        self.duty = duty
+        self._register_parameter('amplitude', tolerance=tolerance, modifiable=True, used_for_comparison=True)
 
         # check that each period contains at least 6 samples
         min_sample = 6
-        if periods is None:
-            self.periods = self.length // min_sample
-        self.limit_length = (self.periods * min_sample, float('inf'))
-        error_str = (f"We require at least {min_sample} samples per period (in total: {self.limit_length[0]}). "
-                     f"Currently: {self.length}.")
-        self.check_value(self.length, 'length', error_str)
+        error_str = f"We require at least {min_sample} samples per period."
+        max_periods = self.length//min_sample
+
+        # create and register the periods
+        self.periods = periods
+        if self.periods is None:
+            self.periods = max_periods
+        self._register_parameter('periods', limit=(1, max_periods), modifiable=True,
+                                 used_for_comparison=False, limit_error_explanation=error_str)
 
         # check that the duty is between zero and one
-        self.limit_duty = (0, 1)
-        self.check_value(self.duty, 'duty')
+        self.duty = duty
+        self._register_parameter('duty', modifiable=True, used_for_comparison=True, tolerance=tolerance,
+                                 limit=(0, 1))
 
     def render(self):
         # start at -1 and end at -1 (half of a period multiplied with duty)
@@ -166,7 +147,7 @@ class SquareOscillation(base.BaseOscillation):
 
 class SawtoothOscillation(base.BaseOscillation):
 
-    def __init__(self, length: int , periods: int = None, width: float = 0.5, amplitude: float = 1.0,
+    def __init__(self, length: int = 100, periods: int = None, width: float = 0.5, amplitude: float = 1.0,
                  tolerance: float = 1.0):
         super().__init__(length, tolerance)
 
