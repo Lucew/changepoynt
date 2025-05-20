@@ -92,7 +92,7 @@ jobs:
           sparse-checkout: |
             tests
       - name: Extract the version number we are aiming to install
-        run: bash .github/scripts/extract_version.sh ${{ github.run_number }}
+        run: bash .github/scripts/extract_and_publish_version.sh ${{ github.run_number }}
       - name: Install dependencies
         # https://packaging.python.org/en/latest/guides/using-testpypi/
         # we need to have the extra index url to install dependencies of changepoynt
