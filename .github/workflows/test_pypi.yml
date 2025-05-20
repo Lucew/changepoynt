@@ -100,13 +100,21 @@ jobs:
         run: |
           mv scripts/extract_and_publish_version.sh .
       - name: Extract the version number we are aiming to install
-        run: sh extract_and_publish_version.sh ${{ github.run_number }}
-      - name: Install dependencies
-        # https://packaging.python.org/en/latest/guides/using-testpypi/
-        # we need to have the extra index url to install dependencies of changepoynt
         run: |
-          python3 -m pip install pytest
-          python3 -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ changepoynt==${{ env.VERSION_WITH_BUILD }}
+          sh extract_and_publish_version.sh ${{ github.run_number }}
+      # retry the installation as test.pypi sometimes takes am moment to refresh
+      - name:
+        uses: nick-fields/retry@v2
+        with:
+          max_attempts: 3
+          retry_on: error
+          timeout_seconds: 1
+          # https://github.com/actions/checkout#fetch-only-a-single-file
+          # get only the test files for the test of the installed package
+          # also we need the extra url to acquire the dependencies
+          command: |
+              python3 -m pip install pytest
+              python3 -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ changepoynt==${{ env.VERSION_WITH_BUILD }}
       - name: Test with pytest
         run: pytest
 
