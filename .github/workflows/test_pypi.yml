@@ -36,7 +36,7 @@ jobs:
 
   # publish the package to test.pypi.org
   pypi-publish:
-    name: Upload release to PyPI
+    name: Upload release to test server PyPI
     needs: test-package
     runs-on: ubuntu-latest
     # Specifying a GitHub environment is optional, but strongly encouraged
@@ -76,7 +76,7 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
-        python-version: [ '3.9', '3.11' ]
+        python-version: [ '3.9', '3.11', '3.12']
 
     steps:
       - name: Set up Python ${{ matrix.python-version }}
@@ -95,7 +95,7 @@ jobs:
         # https://packaging.python.org/en/latest/guides/using-testpypi/
         run: |
           python3 -m pip install pytest
-          python3 -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ changepoynt
+          python3 -m pip install --index-url https://test.pypi.org/simple/ changepoynt
       - name: Test with pytest
         run: pytest
 
