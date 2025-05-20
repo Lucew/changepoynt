@@ -106,7 +106,7 @@ jobs:
         # we need to have the extra index url to install dependencies of changepoynt
         run: |
           python3 -m pip install pytest
-          python3 -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ changepoynt====${{ env.VERSION_WITH_BUILD }}
+          python3 -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ changepoynt==${{ env.VERSION_WITH_BUILD }}
       - name: Test with pytest
         run: pytest
 
