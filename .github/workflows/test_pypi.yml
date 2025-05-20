@@ -93,9 +93,9 @@ jobs:
             tests
       - name: Install dependencies
         # https://packaging.python.org/en/latest/guides/using-testpypi/
+        # we need to have the extra index url to install dependencies of changepoynt
         run: |
           python3 -m pip install pytest
-        # we need to have the extra index url to install dependencies of changepoynt
           python3 -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ changepoynt
       - name: Test with pytest
         run: pytest
