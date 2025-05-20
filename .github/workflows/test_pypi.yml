@@ -52,6 +52,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Get the scripts file into the root directory
+        run: |
+          mv scripts/rename_version.sh .
       - name: Update the package Version for testing
         # https://stackoverflow.com/questions/54310050/how-to-version-build-artifacts-using-github-actions
         run: |
@@ -91,6 +94,11 @@ jobs:
         with:
           sparse-checkout: |
             tests
+            scripts
+            pyproject.toml
+      - name: Get the scripts file into the root directory
+        run: |
+          mv scripts/extract_and_publish_version.sh .
       - name: Extract the version number we are aiming to install
         run: bash .github/scripts/extract_and_publish_version.sh ${{ github.run_number }}
       - name: Install dependencies
