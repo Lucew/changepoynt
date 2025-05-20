@@ -108,7 +108,8 @@ jobs:
         with:
           max_attempts: 3
           retry_on: error
-          timeout_seconds: 1
+          timeout_seconds: 100
+          retry_wait_seconds: 1
           # https://github.com/actions/checkout#fetch-only-a-single-file
           # get only the test files for the test of the installed package
           # also we need the extra url to acquire the dependencies
