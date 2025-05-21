@@ -1,5 +1,6 @@
 import typing
 import abc
+from inspect import isclass
 
 import numpy as np
 
@@ -147,6 +148,24 @@ class SignalPartMeta(type):
 
         # instantiate the super class
         new_cls = super().__new__(cls, name, bases, namespace)
+
+        # check that the every transition has a from_object and to_object tuple
+        if bases and any(base.__name__ == 'BaseTransition' for base in bases):
+
+            # check that we have from_object and to_object
+            if 'allowed_from' not in namespace or 'allowed_to' not in namespace:
+                raise NotImplementedError(
+                    f"Class '{name}' is a Transition and needs to have 'allowed_from' 'allowed_to' as class variables.")
+
+            # get the values
+            from_to_objects = {'allowed_from': namespace['allowed_from'], 'allowed_to': namespace['allowed_to']}
+            for object_name, object_list in from_to_objects.items():
+                if not isinstance(object_list, tuple):
+                    raise TypeError(f"Attribute '{object_name}' of class '{cls.__name__}' has to be of type tuple. Currently: {type(object_list)}.")
+                if len(object_list) == 0:
+                    raise ValueError(f"Attribute '{object_name}' of class '{cls.__name__}' has to specify at least one object.")
+                if not all(issubclass(objects, SignalPart) and isclass(objects) for objects in object_list):
+                    raise TypeError(f"All objects {object_name} of class '{cls.__name__}' have to be a subclass of SignalPart. Currently: {object_list}.")
 
         # Check for derived parameters and verify compute method exists
         # also check that no parameter length is defined
@@ -350,6 +369,31 @@ class BaseNoise(SignalPart):
     This class builds the base for a Noise signal. Noise will be always additive and is assigned to every
     Signal. It has to have a render function to be called when compiling the signal.
     """
+
+    @abc.abstractmethod
+    def render(self) -> np.ndarray:
+        raise NotImplementedError
+
+
+class BaseTransition(SignalPart):
+    """
+    This class builds the base for a Transition. A transition always connects two classes of oscillations.
+    """
+    allowed_from: tuple[typing.Type[SignalPart], ...]
+    allowed_to: tuple[typing.Type[SignalPart], ...]
+
+    def __init__(self, length: int, from_object: SignalPart, to_object: SignalPart):
+        super().__init__(length)
+
+        # check whether the from and to object are allowed
+        if not any(isinstance(from_object, allowed_from) for allowed_from in self.allowed_from):
+            raise TypeError(f"'from_object' must be one of types {self.allowed_from}.")
+        if not any(isinstance(from_object, allowed_to) for allowed_to in self.allowed_to):
+            raise TypeError(f"'from_object' must be one of types {self.allowed_to}.")
+
+        # save the object we are coming from
+        self.from_object = from_object
+        self.to_object = to_object
 
     @abc.abstractmethod
     def render(self) -> np.ndarray:
