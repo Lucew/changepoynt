@@ -5,9 +5,9 @@ import numpy as np
 
 
 class Parameter:
-    def __init__(self, param_type: type,
+    def __init__(self, param_type: typing.Union[type, tuple[type,...]],
                  default_value: typing.Union[int, float] = None,
-                 limit: tuple[typing.Union[int, float], typing.Union[int, float]] = None,
+                 limit: tuple[typing.Union[int, float], ...] = None,
                  tolerance: typing.Union[int, float] = None,
                  derived: bool = False,
                  modifiable: bool = True,
@@ -16,15 +16,18 @@ class Parameter:
                  limit_error_explanation: str = "",
                  doc: str = ""):
 
-        # save the parameter type
-        self.param_type = param_type
+        # save the parameter type as a tuple
+        if isinstance(param_type, tuple):
+            self.param_type = param_type
+        else:
+            self.param_type = (param_type, )
 
         # check the limit and set a default if limit is None
         if limit is None:
             limit = (-float("inf"), float("inf"))
-        if len(limit) != 2:
-            raise TypeError(f"Parameter limit must be of length 2. Currently: {len(limit)}.")
-        if limit[0] > limit[1]:
+        if len(limit) < 2:
+            raise TypeError(f"Parameter limit must have minimum length of 2. Currently: {len(limit)}.")
+        if any(limit1 >= limit2 for limit1, limit2 in zip(limit, limit[1:])):
             raise ValueError(f"Parameter limits must be strictly increasing. Currently: {limit}.")
         self.limit = limit
 
@@ -70,12 +73,23 @@ class Parameter:
         # save the docstring
         self.doc = doc
 
+    def get_information(self):
+        return {'limit': self.limit, 'tolerance': self.tolerance, 'default_value': self.default_value}
+
     def __get__(self, instance, owner):
         if instance is None:
             return self
         if self.derived:
+            # create the function name
+            function_name = f"compute_{self.name}"
+
             # Derived values must be computed by a method/property
-            return getattr(instance, f"compute_{self.name}")()
+            function_value = getattr(instance, function_name)()
+
+            # check that we get the specified type
+            if not any(isinstance(function_value, paramtype) for paramtype in self.param_type):
+                raise TypeError(f"The function for derived parameter {self.name} of class {instance.__class__} has to return a value of {self.param_type}. Currently it returns: {type(function_value)}.")
+            return function_value
         return instance._values.get(self.name)
 
     def __set__(self, instance, value):
@@ -86,16 +100,20 @@ class Parameter:
 
         # check whether it is modifiable, and we already have an instance
         if not self.modifiable and self.name in instance._values:
-            raise AttributeError(f"'{self.name}' is not modifiable.")
+            raise AttributeError(f"Parameter '{self.name}' is not modifiable.")
 
         # check the limit
-        low, high = self.limit
-        if not (low <= value <= high):
-            raise ValueError(f"{self.name} with value {value} out of range: {self.limit}.{f' {self.limit_error_explanation}.' if self.limit_error_explanation else ''}")
+        if not (self.limit[0] <= value <= self.limit[-1]):
+            raise ValueError(f"Parameter '{self.name}' with value {value} out of range: {self.limit}.{f' {self.limit_error_explanation}.' if self.limit_error_explanation else ''}")
+
+        # check the illicit values
+        for illicit_val in self.limit[1:-1]:
+            if abs(value - illicit_val) <= self.tolerance:
+                raise ValueError(f"Parameter '{self.name}' with value {value} not allowed within tolerance ({self.tolerance}) of illicit value '{illicit_val}' in limit {self.limit}.")
 
         # check the type of the set value
-        if not isinstance(value, self.param_type):
-            raise TypeError(f"{self.name} must be {self.param_type}")
+        if not any(isinstance(value, paramtype) for paramtype in self.param_type):
+            raise TypeError(f"Parameter '{self.name}' must be one of {self.param_type}. Currently: {type(value)}.")
 
         # set the value of the instance and not of the parameter
         # otherwise it will be set globally for all instances of this class
@@ -182,9 +200,15 @@ class SignalPart(metaclass=SignalPartMeta):
             raise ValueError(f'Length is too short: {length} < {minimum_length}.')
         self.length = length
 
-        # go through the parameters and check whether they have been specified in the keywords
+        # make a dict that the parameter can fill to save information
         self._values = {}
+        self.parameter_info = {}
+
+        # go through the parameters and check whether they have been specified in the keywords
         for name, param in self._parameters.items():
+
+            # save the default values and the limits
+            self.parameter_info[name] = param.get_information()
 
             # if the parameter is derived we do not have to set it
             if param.derived:
@@ -196,22 +220,18 @@ class SignalPart(metaclass=SignalPartMeta):
             elif param.default_value is not None:
                 setattr(self, name, param.default_value)
             else:
-                raise ValueError(f"Class {type(self).__name__}. Missing parameter: {name}.")
+                raise ValueError(f"Missing parameter: {name}.")
+
 
         # check that all kwargs are parameters
         unknown_parameters = kwargs.keys() - self._parameters.keys()
         if unknown_parameters:
-            raise ValueError(f"Class {type(self).__name__}. Your specified unknown parameters: {unknown_parameters}.")
+            raise ValueError(f"Your specified unknown parameters: {unknown_parameters}.")
 
         # whether we specified derived parameters
         derived_parameters = kwargs.keys() & {name for name, param in self._parameters.items() if param.derived}
         if derived_parameters:
-            raise ValueError(f"Class {type(self).__name__}. Your specified derived parameters: {derived_parameters}.")
-
-        # whether we specified unmodifiable parameters
-        frozen_parameters = kwargs.keys() & {name for name, param in self._parameters.items() if not param.modifiable}
-        if frozen_parameters:
-            raise ValueError(f"Class {type(self).__name__}. Your specified frozen parameters: {derived_parameters}.")
+            raise ValueError(f"Your specified derived parameters: {derived_parameters}.")
 
     @classmethod
     def get_registered_signal_parts(cls):
@@ -231,7 +251,7 @@ class SignalPart(metaclass=SignalPartMeta):
         return {group.__name__: cls.get_registered_signal_parts_group(group) for group in subclasses}
 
     @classmethod
-    def get_parameters(cls, modifiable=True):
+    def get_parameters(cls):
         return cls._parameters
 
     @classmethod

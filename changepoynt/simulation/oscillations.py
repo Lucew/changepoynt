@@ -9,7 +9,7 @@ from changepoynt.simulation import base
 
 class Periodic(base.BaseOscillation):
     periods = base.Parameter(int, limit=(1, 100), tolerance=0.5,use_for_comparison=False)
-    amplitude = base.Parameter(float, limit=(-np.inf, np.inf), tolerance=0.1, default_value=1.0)
+    amplitude = base.Parameter((float, int), limit=(-np.inf, np.inf), tolerance=0.1, default_value=1.0)
     wavelength = base.Parameter(float, limit=(5, np.inf), derived=True, tolerance=0.1, modifiable=False, use_random=False, limit_error_explanation="We require at least 5 samples per period. Either specify less periods or greater length.")
 
     def compute_wavelength(self):
@@ -60,7 +60,7 @@ class DirichletOscillation(Periodic):
 
 
 class SquareOscillation(Periodic):
-    duty = base.Parameter(float, limit=(0, 1), tolerance=0.05, default_value=0.5)
+    duty = base.Parameter((float, int), limit=(0, 1), tolerance=0.05, default_value=0.5)
     wavelength = base.Parameter(float, limit=(2, np.inf), derived=True, tolerance=0.1, modifiable=False, use_random=False, limit_error_explanation="We require at least 2 samples per period. Either specify less periods or greater length.")
 
     def render(self) -> np.ndarray:
@@ -75,7 +75,7 @@ class SquareOscillation(Periodic):
 
 
 class SawtoothOscillation(Periodic):
-    width = base.Parameter(float, limit=(0, 1), tolerance=0.05)
+    width = base.Parameter((float, int), limit=(0, 1), tolerance=0.05)
     wavelength = base.Parameter(float, limit=(6, np.inf), derived=True, tolerance=0.1, use_random=False, modifiable=False, limit_error_explanation="We require at least 6 samples per period. Either specify less periods or greater length.")
 
     def render(self) -> np.ndarray:
