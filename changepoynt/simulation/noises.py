@@ -7,8 +7,8 @@ class NoNoise(base.BaseNoise):
     """
     This class is the default if no noise is specified. It adds no noise to the signal.
     """
-    def render(self, *args, **kwargs) -> float:
-        return 0
+    def render(self, *args, **kwargs) -> np.ndarray:
+        return np.zeros((self.length,))
 
 
 class GaussianNoise(base.BaseNoise):

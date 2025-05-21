@@ -89,7 +89,7 @@ class Parameter:
 
             # check that we get the specified type
             if not any(isinstance(function_value, paramtype) for paramtype in self.param_type):
-                raise TypeError(f"The function for derived parameter {self.name} of class {instance.__class__} has to return a value of {self.param_type}. Currently it returns: {type(function_value)}.")
+                raise TypeError(f"The function '{function_name}' for derived parameter '{self.name}' of class {instance.__class__} has to return a value of {self.param_type}. Currently it returns: {type(function_value)}.")
             return function_value
         return instance._values.get(self.name)
 
@@ -149,22 +149,22 @@ class SignalPartMeta(type):
         # instantiate the super class
         new_cls = super().__new__(cls, name, bases, namespace)
 
-        # check that the every transition has a from_object and to_object tuple
+        # the current class is a transition and not the base class
         if bases and any(base.__name__ == 'BaseTransition' for base in bases):
 
-            # check that we have from_object and to_object
+            # check that the every transition has allowed_from and allowed_to class attributes
             if 'allowed_from' not in namespace or 'allowed_to' not in namespace:
                 raise NotImplementedError(
                     f"Class '{name}' is a Transition and needs to have 'allowed_from' 'allowed_to' as class variables.")
 
-            # get the values
+            # test whether we properly defined the allowed_from and allowed_to attributes of the transition class
             from_to_objects = {'allowed_from': namespace['allowed_from'], 'allowed_to': namespace['allowed_to']}
             for object_name, object_list in from_to_objects.items():
                 if not isinstance(object_list, tuple):
                     raise TypeError(f"Attribute '{object_name}' of class '{cls.__name__}' has to be of type tuple. Currently: {type(object_list)}.")
                 if len(object_list) == 0:
                     raise ValueError(f"Attribute '{object_name}' of class '{cls.__name__}' has to specify at least one object.")
-                if not all(issubclass(objects, SignalPart) and isclass(objects) for objects in object_list):
+                if not all(isclass(objects) and issubclass(objects, SignalPart) and isclass(objects) for objects in object_list):
                     raise TypeError(f"All objects {object_name} of class '{cls.__name__}' have to be a subclass of SignalPart. Currently: {object_list}.")
 
         # Check for derived parameters and verify compute method exists
@@ -183,8 +183,19 @@ class SignalPartMeta(type):
             if param.derived and not hasattr(new_cls, f"compute_{param.name}"):
                 raise TypeError(f"'Class {name}: Derived parameter '{param.name}' is missing compute method 'compute_{param.name}'.")
 
+        # check that the render function returns a numpy array
+        has_render = has_concrete_render(new_cls)
+        if has_render:
+            return_type = typing.get_type_hints(getattr(new_cls, "render"))
+            if 'return' not in return_type:
+                raise NotImplementedError(f"The render function of class {name} is missing a return type annotation.")
+
+            return_type = return_type['return']
+            if return_type != np.ndarray:
+                raise TypeError(f"The render function of class {name} has to return np.ndarray. Currently the type hint says: {return_type}.")
+
         # put the class into the registry
-        if name != "SignalPart" and has_concrete_render(new_cls):
+        if has_render and SignalPart not in bases:
             SignalPart._registry[name] = new_cls
 
         # return the new class
@@ -213,10 +224,10 @@ class SignalPart(metaclass=SignalPartMeta):
     def __init__(self, length: int, **kwargs):
 
         # save and check the length
-        minimum_length = 100
+        minimum_length = 100 if not isinstance(self, BaseTransition) else 0
         length = length
         if length < minimum_length:
-            raise ValueError(f'Length is too short: {length} < {minimum_length}.')
+            raise ValueError(f'Instance class {self.__class__} length is too short: {length} < {minimum_length}.')
         self.length = length
 
         # make a dict that the parameter can fill to save information
@@ -276,6 +287,18 @@ class SignalPart(metaclass=SignalPartMeta):
     @classmethod
     def get_parameters_for_randomizations(cls):
         return {name: param for name, param in cls._parameters.items() if param.use_random}
+
+    @classmethod
+    def get_possible_transitions(cls, from_object: 'SignalPart', to_object: 'SignalPart'):
+        possible_transitions = {}
+        for name, transition_class in cls.get_registered_signal_parts_group(BaseTransition).items():
+            try:
+                print(name)
+                transition = transition_class(length=100, from_object=from_object, to_object=to_object)
+                possible_transitions[name] = transition
+            except TypeRestrictedError:
+                continue
+        return possible_transitions
 
     @property
     def shape(self) -> tuple[int,]:
@@ -345,14 +368,6 @@ class BaseOscillation(SignalPart):
         raise NotImplementedError
 
 
-class NoOscillation(BaseOscillation):
-    """
-    This will implement a simple line. Offset will be done using a trend.
-    """
-    def render(self) -> int:
-        return 0
-
-
 class BaseTrend(SignalPart):
     """
     This class builds the base for a Trend. For example, this can be constant, a line with a slope. The trend
@@ -375,6 +390,10 @@ class BaseNoise(SignalPart):
         raise NotImplementedError
 
 
+class TypeRestrictedError(TypeError):
+    pass
+
+
 class BaseTransition(SignalPart):
     """
     This class builds the base for a Transition. A transition always connects two classes of oscillations.
@@ -382,22 +401,78 @@ class BaseTransition(SignalPart):
     allowed_from: tuple[typing.Type[SignalPart], ...]
     allowed_to: tuple[typing.Type[SignalPart], ...]
 
+    @property
+    @abc.abstractmethod
+    def allowed_from(self):
+        """
+        This property is the modern way of specifying an abstract attribute
+        https://stackoverflow.com/a/41897823
+        :return:
+        """
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def allowed_to(self):
+        """
+        This property is the modern way of specifying an abstract attribute
+        https://stackoverflow.com/a/41897823
+        :return:
+        """
+        raise NotImplementedError
+
     def __init__(self, length: int, from_object: SignalPart, to_object: SignalPart):
-        super().__init__(length)
+
+        # the length of a transition is the two signals combined
+        super().__init__(from_object.shape[0]+to_object.shape[0])
 
         # check whether the from and to object are allowed
         if not any(isinstance(from_object, allowed_from) for allowed_from in self.allowed_from):
-            raise TypeError(f"'from_object' must be one of types {self.allowed_from}.")
+            raise TypeRestrictedError(f"'from_object' must be one of types {self.allowed_from}.")
         if not any(isinstance(from_object, allowed_to) for allowed_to in self.allowed_to):
-            raise TypeError(f"'from_object' must be one of types {self.allowed_to}.")
+            raise TypeRestrictedError(f"'from_object' must be one of types {self.allowed_to}.")
+
+        # check that the length is at least one
+        if length < 1:
+            raise ValueError(f"'length' must be greater than 0. Currently: {length}.")
 
         # save the object we are coming from
         self.from_object = from_object
         self.to_object = to_object
+        self.transition_length = length
+
+        # check that both from and to objects are longer or equal to the transition length
+        if from_object.shape[0] < self.transition_length:
+            raise ValueError(f"The specified 'transition_length' ({length}) has to be shorter than the length of the 'from_object' ({from_object.shape[0]}).")
+        if to_object.shape[0] < self.transition_length:
+            raise ValueError(f"The 'transition_length' ({length}) has to be shorter than the length of the 'to_object' ({from_object.shape[0]}).")
+
+        # get the start y-values and end y-values by rendering both objects
+        self.start_y = from_object.render()[-self.transition_length:]
+        self.end_y = to_object.render()[:self.transition_length]
 
     @abc.abstractmethod
-    def render(self) -> np.ndarray:
+    def get_transition_values(self) -> np.ndarray:
         raise NotImplementedError
+
+    def render(self) -> np.ndarray:
+
+        # get the transition values from the actual implementation
+        transition_values = self.get_transition_values()
+
+        # check whether the implementation works as expected
+        info_string = f"Problematic Class is '{self.__class__.__name__}'."
+        if not isinstance(transition_values, np.ndarray):
+            raise TypeError(f"{info_string} The return value of 'get_transition_values' must be a numpy array. Current type: {type(transition_values)}.")
+        if transition_values.ndim != 1:
+            raise np.exceptions.AxisError(f"{info_string} The return array of 'get_transition_values' must be a 1D numpy array. Current shape: {transition_values.shape}.")
+        if transition_values.shape[0] != self.transition_length*2:
+            raise np.exceptions.AxisError(f"{info_string} The return array of 'get_transition_values' must have the length of 2*'transition_length' ({self.transition_length}). Current length: {transition_values.shape[0]}.")
+
+        # render the signal of both objects and replace values in between with the transition values
+        from_signal = self.from_object.render()[:-self.transition_length]
+        to_signal = self.to_object.render()[self.transition_length:]
+        return np.concatenate((from_signal, transition_values, to_signal))
 
 
 if __name__ == "__main__":

@@ -7,6 +7,14 @@ import scipy.special as spspec
 from changepoynt.simulation import base
 
 
+class NoOscillation(base.BaseOscillation):
+    """
+    This will implement a simple line. Offset will be done using a trend.
+    """
+    def render(self) -> np.ndarray:
+        return np.zeros(self.shape)
+
+
 class Periodic(base.BaseOscillation):
     periods = base.Parameter(int, limit=(1, 100), tolerance=0.5,use_for_comparison=False)
     amplitude = base.Parameter((float, int), limit=(-np.inf, np.inf), tolerance=0.1, default_value=1.0)

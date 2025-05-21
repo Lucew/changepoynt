@@ -6,14 +6,14 @@ from changepoynt.simulation import base
 class ConstantOffset(base.BaseTrend):
     offset = base.Parameter((float, int), limit=(-np.inf, np.inf), tolerance=0.1)
 
-    def render(self):
-        return self.offset
+    def render(self) -> np.ndarray:
+        return np.ones((self.length,))*self.offset
 
 
 class LinearTrend(base.BaseTrend):
     offset = base.Parameter((float, int), limit=(-np.inf, np.inf), tolerance=0.1)
     slope = base.Parameter((float, int), limit=(-np.inf, 0, np.inf), tolerance=0.1)
-    attachment_point = base.Parameter(float, limit=(-np.inf, np.inf), tolerance=0.1, modifiable=False, derived=True, use_random=False)
+    attachment_point = base.Parameter((float, int), limit=(-np.inf, np.inf), tolerance=0.1, modifiable=False, derived=True, use_random=False)
 
     def compute_attachment_point(self):
         # compute where the current slope ends
