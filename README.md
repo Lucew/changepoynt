@@ -166,8 +166,8 @@ Fortunately, there is an easy workaround. Just add a small white noise to your s
 introduce large additional change points and the methods will not fail.
 
 ### Python 3.13 no supported for all methods
-We are aware that some packages are currently not supported when using Python 3.13 and higher.
-These packages are mostly used for the fast_hankel option and we are currently checking whether to make those packages
+We are aware that some dependencies are working with Python 3.13 and higher.
+These packages are mostly used for the fast_hankel option, and we are currently checking whether to make those packages
 optional
 
 # Outlook <a id="outlook"></a>
