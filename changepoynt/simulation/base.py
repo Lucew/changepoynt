@@ -421,7 +421,7 @@ class BaseTransition(SignalPart):
         """
         raise NotImplementedError
 
-    def __init__(self, length: int, from_object: SignalPart, to_object: SignalPart):
+    def __init__(self, length: typing.Union[int, float], from_object: SignalPart, to_object: SignalPart):
 
         # the length of a transition is the two signals combined
         super().__init__(from_object.shape[0]+to_object.shape[0])
@@ -433,13 +433,20 @@ class BaseTransition(SignalPart):
             raise TypeRestrictedError(f"'from_object' must be one of types {self.allowed_to}.")
 
         # check that the length is at least one
-        if length < 1:
-            raise ValueError(f"'length' must be greater than 0. Currently: {length}.")
+        if isinstance(length, int):
+            if length < 1:
+                raise ValueError(f"In case of an 'int' type 'length' must be greater than 0. Currently: '{length}'.")
+            self.transition_length = length
+        elif isinstance(length, float):
+            if not 0 < length < 1:
+                raise ValueError(f"In case of a 'float' type 'length' must be in interval (0, 1) exclusively. Currently: '{length}'.")
+            self.transition_length = int(min(from_object.shape[0], to_object.shape[0])*length)
+        else:
+            raise TypeError(f"Length must be either 'float' or 'int'. Currently: '{type(length)}'.")
 
         # save the object we are coming from
         self.from_object = from_object
         self.to_object = to_object
-        self.transition_length = length
 
         # check that both from and to objects are longer or equal to the transition length
         if from_object.shape[0] < self.transition_length:
