@@ -293,8 +293,7 @@ class SignalPart(metaclass=SignalPartMeta):
         possible_transitions = {}
         for name, transition_class in cls.get_registered_signal_parts_group(BaseTransition).items():
             try:
-                print(name)
-                transition = transition_class(length=100, from_object=from_object, to_object=to_object)
+                transition = transition_class(transition_length=100, from_object=from_object, to_object=to_object)
                 possible_transitions[name] = transition
             except TypeRestrictedError:
                 continue
@@ -421,7 +420,7 @@ class BaseTransition(SignalPart):
         """
         raise NotImplementedError
 
-    def __init__(self, length: typing.Union[int, float], from_object: SignalPart, to_object: SignalPart):
+    def __init__(self, transition_length: typing.Union[int, float], from_object: SignalPart, to_object: SignalPart):
 
         # the length of a transition is the two signals combined
         super().__init__(from_object.shape[0]+to_object.shape[0])
@@ -433,16 +432,16 @@ class BaseTransition(SignalPart):
             raise TypeRestrictedError(f"'from_object' must be one of types {self.allowed_to}.")
 
         # check that the length is at least one
-        if isinstance(length, int):
-            if length < 1:
-                raise ValueError(f"In case of an 'int' type 'length' must be greater than 0. Currently: '{length}'.")
-            self.transition_length = length
-        elif isinstance(length, float):
-            if not 0 < length < 1:
-                raise ValueError(f"In case of a 'float' type 'length' must be in interval (0, 1) exclusively. Currently: '{length}'.")
-            self.transition_length = int(min(from_object.shape[0], to_object.shape[0])*length)
+        if isinstance(transition_length, int):
+            if transition_length < 1:
+                raise ValueError(f"In case of an 'int' type 'length' must be greater than 0. Currently: '{transition_length}'.")
+            self.transition_length = transition_length
+        elif isinstance(transition_length, float):
+            if not 0 < transition_length < 1:
+                raise ValueError(f"In case of a 'float' type 'length' must be in interval (0, 1) exclusively. Currently: '{transition_length}'.")
+            self.transition_length = int(min(from_object.shape[0], to_object.shape[0])*transition_length)
         else:
-            raise TypeError(f"Length must be either 'float' or 'int'. Currently: '{type(length)}'.")
+            raise TypeError(f"Length must be either 'float' or 'int'. Currently: '{type(transition_length)}'.")
 
         # save the object we are coming from
         self.from_object = from_object
@@ -450,9 +449,9 @@ class BaseTransition(SignalPart):
 
         # check that both from and to objects are longer or equal to the transition length
         if from_object.shape[0] < self.transition_length:
-            raise ValueError(f"The specified 'transition_length' ({length}) has to be shorter than the length of the 'from_object' ({from_object.shape[0]}).")
+            raise ValueError(f"The specified 'transition_length' ({transition_length}) has to be shorter than the length of the 'from_object' ({from_object.shape[0]}).")
         if to_object.shape[0] < self.transition_length:
-            raise ValueError(f"The 'transition_length' ({length}) has to be shorter than the length of the 'to_object' ({from_object.shape[0]}).")
+            raise ValueError(f"The 'transition_length' ({transition_length}) has to be shorter than the length of the 'to_object' ({from_object.shape[0]}).")
 
         # get the start y-values and end y-values by rendering both objects
         self.start_y = from_object.render()[-self.transition_length:]

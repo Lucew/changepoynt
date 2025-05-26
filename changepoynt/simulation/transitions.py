@@ -62,8 +62,8 @@ if __name__ == '__main__':
     # make transition between constant trends
     trend1 = trends.ConstantOffset(length=200, offset=12)
     trend2 = trends.ConstantOffset(length=200, offset=5)
-    transition1 = ConstantTrendTransition(length=40, from_object=trend1, to_object=trend2)
-    transition2 = NoTransition(length=100, from_object=trend1, to_object=trend2)
+    transition1 = ConstantTrendTransition(transition_length=40, from_object=trend1, to_object=trend2)
+    transition2 = NoTransition(transition_length=100, from_object=trend1, to_object=trend2)
     print(np.all(np.equal(transition2.render(), np.concatenate((transition2.from_object.render(), transition2.to_object.render()))))) # has to be true
 
     array = transition1.render()
@@ -76,8 +76,8 @@ if __name__ == '__main__':
     plt.figure()
     trend3 = trends.LinearTrend(200, slope=5, offset=0)
     trend4 = trends.LinearTrend(200, slope=35, offset=10)
-    transition3 = LinearTrendTransition(length=100, from_object=trend3, to_object=trend4)
-    transition4 = NoTransition(length=100, from_object=trend3, to_object=trend4)
+    transition3 = LinearTrendTransition(transition_length=100, from_object=trend3, to_object=trend4)
+    transition4 = NoTransition(transition_length=100, from_object=trend3, to_object=trend4)
     print(np.all(np.equal(transition4.render(), np.concatenate((transition4.from_object.render(), transition4.to_object.render()))))) # has to be true
     array = transition3.render()
     array2 = transition4.render()
