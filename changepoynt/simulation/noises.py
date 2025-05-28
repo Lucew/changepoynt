@@ -12,12 +12,11 @@ class NoNoise(base.BaseNoise):
 
 
 class GaussianNoise(base.BaseNoise):
-    mean = base.Parameter((float, int), tolerance=0.1)
     std = base.Parameter((float, int), limit=(-np.inf, 0, np.inf), tolerance=0.05)
     seed = base.Parameter(int, tolerance=0.1, modifiable=False, use_for_comparison=False)
 
     def render(self) -> np.ndarray:
-        return self.seed.normal(self.mean, self.std, self.length)
+        return self.seed.normal(0.0, self.std, self.length)
 
 
 if __name__ == "__main__":
@@ -26,5 +25,5 @@ if __name__ == "__main__":
     n3 = GaussianNoise(100, mean=20, std=0.1, seed=1100)
     print(n1 == n2) # true
     print(n1 == n3) # false
-    print(n1 != n2)
-    print(n1 != n3)
+    print(n1 != n2) # false
+    print(n1 != n3) # true
