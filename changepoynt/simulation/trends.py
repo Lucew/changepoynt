@@ -61,4 +61,4 @@ if __name__ == "__main__":
     trend5 = ConstantOffset(length=500, offset=499.0)
     print(trend4 == trend5) # should be true
 
-    trend6 = LinearTrend(length=500, offset=499.0, slope=0.1) # fails
+    # trend6 = LinearTrend(length=500, offset=499.0, slope=0.1) # fails

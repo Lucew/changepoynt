@@ -284,6 +284,9 @@ class SignalPart(metaclass=SignalPartMeta):
     def get_parameters(cls):
         return cls._parameters
 
+    def get_parameter_value(self, name):
+        return self._values[name]
+
     @classmethod
     def get_parameters_for_randomizations(cls):
         return {name: param for name, param in cls._parameters.items() if param.use_random}
@@ -437,21 +440,26 @@ class BaseTransition(SignalPart):
                 raise ValueError(f"In case of an 'int' type 'length' must be greater than 0. Currently: '{transition_length}'.")
             self.transition_length = transition_length
         elif isinstance(transition_length, float):
-            if not 0 < transition_length < 1:
-                raise ValueError(f"In case of a 'float' type 'length' must be in interval (0, 1) exclusively. Currently: '{transition_length}'.")
+            if not 0 < transition_length < 0.5:
+                raise ValueError(f"In case of a 'float' type 'length' must be in interval (0, 0.5) exclusively. Currently: '{transition_length}'.")
             self.transition_length = int(min(from_object.shape[0], to_object.shape[0])*transition_length)
         else:
             raise TypeError(f"Length must be either 'float' or 'int'. Currently: '{type(transition_length)}'.")
+
+        # check that to and from object are different
+        if from_object == to_object:
+            raise ValueError(f"From object and to object cannot be equal for a transition.")
+
 
         # save the object we are coming from
         self.from_object = from_object
         self.to_object = to_object
 
         # check that both from and to objects are longer or equal to the transition length
-        if from_object.shape[0] < self.transition_length:
-            raise ValueError(f"The specified 'transition_length' ({transition_length}) has to be shorter than the length of the 'from_object' ({from_object.shape[0]}).")
-        if to_object.shape[0] < self.transition_length:
-            raise ValueError(f"The 'transition_length' ({transition_length}) has to be shorter than the length of the 'to_object' ({from_object.shape[0]}).")
+        if from_object.shape[0]//2 < self.transition_length:
+            raise ValueError(f"The specified 'transition_length' ({transition_length}) has to be shorter than half the length of the 'from_object' ({from_object.shape[0]//2}).")
+        if to_object.shape[0]//2 < self.transition_length:
+            raise ValueError(f"The 'transition_length' ({transition_length}) has to be shorter than half the length of the 'to_object' ({from_object.shape[0]//2}).")
 
         # get the start y-values and end y-values by rendering both objects
         self.start_y = from_object.render()[-self.transition_length:]
@@ -459,9 +467,32 @@ class BaseTransition(SignalPart):
 
     @abc.abstractmethod
     def get_transition_values(self) -> np.ndarray:
+        """
+        Every transition subclass must implement this method.
+
+        The function has to fulfill the following criteria:
+        - return a numpy array with one dimension and length of exactly 2*self.transition_length
+        - can use the from and to object
+        :return:
+        """
         raise NotImplementedError
 
+    def get_changepoint(self) -> tuple[int, int]:
+        """
+        A function that returns the change point as a range [from, to] with inclusive borders and indices
+        into the signal. Defaults to the end of from_object to the beginning of to_object.
+
+        Overwrite if not applicable
+
+        :return: [from, to]
+        """
+        return self.from_object.shape[0], self.from_object.shape[0]+1
+
     def render(self) -> np.ndarray:
+        """
+        This function creates the transition values.
+        :return: Tuple[np.ndarray, np.ndarray], (TransitionValuesFrom, TransitionValuesTo)
+        """
 
         # get the transition values from the actual implementation
         transition_values = self.get_transition_values()
@@ -475,10 +506,24 @@ class BaseTransition(SignalPart):
         if transition_values.shape[0] != self.transition_length*2:
             raise np.exceptions.AxisError(f"{info_string} The return array of 'get_transition_values' must have the length of 2*'transition_length' ({self.transition_length}). Current length: {transition_values.shape[0]}.")
 
-        # render the signal of both objects and replace values in between with the transition values
-        from_signal = self.from_object.render()[:-self.transition_length]
-        to_signal = self.to_object.render()[self.transition_length:]
-        return np.concatenate((from_signal, transition_values, to_signal))
+        return transition_values
+
+    def apply(self, rendered_from_signal: np.ndarray, rendered_to_signal: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+
+        # check that the signals have been rendered by the objects specified (and not altered)
+        from_rendered = self.from_object.render()[-self.transition_length:]
+        if not np.all(np.equal(rendered_from_signal[-self.transition_length:], from_rendered)):
+            raise ValueError(f"The 'rendered_from_signal[-self.transition_length]' unequal to the rendered from_object. Is the input array different than rendered from the 'from_object'?")
+        to_rendered = self.to_object.render()[:self.transition_length]
+        if not np.all(np.equal(rendered_to_signal[:self.transition_length], to_rendered)):
+            raise ValueError(f"The 'rendered_to_signal[:self.transition_length]' unequal to the rendered to_object. Is the input array different than rendered from the 'to_object'?")
+
+        # render the current overlap signal
+        transition_values = self.render()
+        rendered_from_signal[-self.transition_length:] = transition_values[:self.transition_length]
+        rendered_to_signal[:self.transition_length] = transition_values[self.transition_length:]
+        return rendered_from_signal, rendered_to_signal
+
 
 
 if __name__ == "__main__":

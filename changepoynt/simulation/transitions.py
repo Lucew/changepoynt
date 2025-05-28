@@ -9,6 +9,10 @@ class NoTransition(base.BaseTransition):
     allowed_from = (base.SignalPart,)
     allowed_to = (base.SignalPart,)
 
+    def __init__(self, from_object, to_object, **kwargs):
+        # have kwargs so it is not a problem if somebody specifies transition_length=1
+        super(NoTransition, self).__init__(1, from_object, to_object)
+
     def get_transition_values(self) -> np.ndarray:
         return np.concatenate((self.start_y, self.end_y))
 
@@ -63,11 +67,14 @@ if __name__ == '__main__':
     trend1 = trends.ConstantOffset(length=200, offset=12)
     trend2 = trends.ConstantOffset(length=200, offset=5)
     transition1 = ConstantTrendTransition(transition_length=40, from_object=trend1, to_object=trend2)
-    transition2 = NoTransition(transition_length=100, from_object=trend1, to_object=trend2)
-    print(np.all(np.equal(transition2.render(), np.concatenate((transition2.from_object.render(), transition2.to_object.render()))))) # has to be true
+    transition2 = NoTransition(transition_length=101, from_object=trend1, to_object=trend2)
+    concat_signal = np.concatenate((trend1.render(), trend2.render()))
+    trans_signal = np.concatenate(transition2.apply(trend1.render(), trend2.render()))
+    print(np.all(np.equal(trans_signal, concat_signal))) # Should be true
 
-    array = transition1.render()
-    array2 = transition2.render()
+
+    array = np.concatenate(transition1.apply(trend1.render(), trend2.render()))
+    array2 = np.concatenate(transition2.apply(trend1.render(), trend2.render()))
     plt.plot(array)
     plt.plot(array2)
     plt.show()
@@ -75,14 +82,17 @@ if __name__ == '__main__':
     # make transition between linear trends
     plt.figure()
     trend3 = trends.LinearTrend(200, slope=5, offset=0)
-    trend4 = trends.LinearTrend(200, slope=35, offset=10)
+    trend4 = trends.LinearTrend(200, slope=35, offset=2000)
     transition3 = LinearTrendTransition(transition_length=100, from_object=trend3, to_object=trend4)
-    transition4 = NoTransition(transition_length=100, from_object=trend3, to_object=trend4)
-    print(np.all(np.equal(transition4.render(), np.concatenate((transition4.from_object.render(), transition4.to_object.render()))))) # has to be true
-    array = transition3.render()
-    array2 = transition4.render()
+    transition4 = NoTransition(transition_length=20, from_object=trend3, to_object=trend4)
+    concat_signal = np.concatenate((trend3.render(), trend4.render()))
+    trans_signal = np.concatenate(transition4.apply(trend3.render(), trend4.render()))
+    print(np.all(np.equal(trans_signal, concat_signal)))  # Should be true
+
+    array = np.concatenate(transition3.apply(trend3.render(), trend4.render()))
+    array2 = np.concatenate(transition4.apply(trend3.render(), trend4.render()))
     plt.plot(array)
-    # plt.plot(array2)
+    plt.plot(array2)
     plt.show()
 
     print(base.SignalPart.get_possible_transitions(trend1, trend2))
