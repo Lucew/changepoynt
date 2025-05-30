@@ -1,4 +1,5 @@
 import typing
+import itertools
 
 import numpy as np
 
@@ -6,6 +7,7 @@ from changepoynt.simulation import base
 from changepoynt.simulation import noises
 from changepoynt.simulation import oscillations
 from changepoynt.simulation import trends
+from changepoynt.simulation import transitions
 
 
 class Signal:
@@ -47,8 +49,15 @@ class Signal:
         self.noise = noise
         self.trend = trend
 
+    def render_parts(self) -> dict[str: tuple[np.ndarray, np.ndarray, np.ndarray]]:
+        return {'oscillation': self.oscillation.render(), 'trend': self.trend.render(), 'noise': self.noise.render()}
+
+    @staticmethod
+    def parts_to_signal(signal_parts: dict[str: tuple[np.ndarray, np.ndarray, np.ndarray]]) -> np.ndarray:
+        return sum(signal_parts.values())
+
     def render(self) -> np.ndarray:
-        return self.oscillation.render() + self.noise.render()
+        return self.parts_to_signal(self.render_parts())
 
     @property
     def shape(self) -> tuple[int,]:
@@ -64,68 +73,93 @@ class Signal:
         # compare the two oscillations for equality, they are equal if trend and oscillation are the same
         return self.oscillation == other.oscillation and self.trend == other.trend
 
-    @staticmethod
-    def translate_length(length: typing.Union[int, "Signal"]) -> int:
-        if isinstance(length, int):
-            return length
-        elif isinstance(length, Signal):
-            return length.shape[0]
-        else:
-            raise ValueError(f"Length must be of class Signal or Tuple. Not: {type(length)}.")
-
 
 class ChangeSignal:
     """
     This is the class for a Change signal. The change signal is always a concatenation of several Signals.
     """
-    def __init__(self, signals: list[Signal], trend: base.BaseTrend = None, noise: base.BaseNoise = None):
+    def __init__(self, signal_list: list[Signal],
+                 oscillation_transition_list: list[typing.Union[base.BaseTransition, None]] = None,
+                 trend_transition_list: list[typing.Union[base.BaseTransition, None]]= None,
+                 general_trend: base.BaseTrend = None, general_noise: base.BaseNoise = None):
 
-        # check whether all signals have a dimension of one
-        if any(len(signal.shape) != 1 for signal in signals):
-            raise ValueError(f"Signal must have 1 dimension.")
+        # make default value for the transition_lists
+        if oscillation_transition_list is None:
+            oscillation_transition_list = [None] * (len(signal_list)-1)
+        if trend_transition_list is None:
+            trend_transition_list = [None] * (len(signal_list)-1)
 
-        # check whether all signals are of type Signal
-        if any(not isinstance(signal, Signal) for signal in signals):
-            raise ValueError(f"All Signals within a ChangeSignal have to be of type Signal.")
+        # check for the length of the transition lists
+        if len(oscillation_transition_list) != len(signal_list)-1:
+            raise ValueError(f"The length of 'oscillation_transition_list' ({len(oscillation_transition_list)}) must be one smaller than the length of 'signal_list' ({len(signal_list)}). ")
+        if len(trend_transition_list) != len(signal_list)-1:
+            raise ValueError(f"The length of 'trend_transition_list' ({len(oscillation_transition_list)}) must be one smaller than the length of 'signal_list' ({len(signal_list)}). ")
 
-        # save the variables
-        self.signals = signals
+        # go through both transition lists, update default Nones and
+        for idx, (trend_transition, oscillation_transition, from_signal, to_signal) in enumerate(zip(trend_transition_list, oscillation_transition_list, signal_list, signal_list[1:])):
+
+            # create the defaults
+            if oscillation_transition is None:
+                oscillation_transition_list[idx] = transitions.NoTransition(from_signal.oscillation, to_signal.oscillation)
+                oscillation_transition = oscillation_transition_list[idx]
+            if trend_transition is None:
+                trend_transition_list[idx] = transitions.NoTransition(from_signal.trend, to_signal.trend)
+                trend_transition = trend_transition_list[idx]
+
+            # check for non defaults whether the connected signals are equal
+            if not oscillation_transition.check_objects(from_signal.oscillation, to_signal.oscillation):
+                raise ValueError(f"'oscillation_transition[{idx}]' does not connect the two signal oscillations 'signal_list[{idx}].oscillation' and 'signal_list[{idx+1}].oscillation' from the 'signal_list'.")
+            if not trend_transition.check_objects(from_signal.trend, to_signal.trend):
+                raise ValueError(f"'oscillation_transition[{idx}]' does not connect the two signal trends 'signal_list[{idx}].trend' and 'signal_list[{idx+1}].trend' from the 'signal_list'.")
+
+            # check that the transitions actually are transitions
+            if not isinstance(oscillation_transition, base.BaseTransition):
+                raise TypeError(f'oscillation_transition[{idx}] is not a BaseTransition.')
+            if not isinstance(trend_transition, base.BaseTransition):
+                raise TypeError(f'trend_transition[{idx}] is not a BaseTransition.')
+
+        # save the transitions
+        self.oscillation_transitions: list[base.BaseTransition] = oscillation_transition_list
+        self.trend_transitions: list[base.BaseTransition] = trend_transition_list
+
+        # save the signals
+        if not all(isinstance(signal, Signal) for signal in signal_list):
+            raise TypeError('All signals must be of type Signal.')
+        self.signals = signal_list
 
         # check for the trend (after we save the signals, as we need their shape to check)
-        if trend is None:
-            trend = trends.ConstantOffset(self.shape[0], offset=0.0)
+        if general_trend is None:
+            general_trend = trends.ConstantOffset(self.shape[0], offset=0.0)
         else:
-            if trend.shape != self.shape:
+            if general_trend.shape != self.shape:
                 raise ValueError(f"Shape of trend and change signal must be the same. Change Signal: {self.shape},"
-                                 f"Trend: {trend.shape}.")
-        self.trend = trend
+                                 f"Trend: {general_trend.shape}.")
+        self.trend = general_trend
 
         # check for the noise (after we save the signals, as we need their shape to check)
-        if noise is None:
-            noise = noises.NoNoise(self.shape[0])
+        if general_noise is None:
+            general_noise = noises.NoNoise(self.shape[0])
         else:
-            if noise.shape != self.shape:
+            if general_noise.shape != self.shape:
                 raise ValueError(f"Shape of trend and change signal must be the same. Change Signal: {self.shape},"
-                                 f"Trend: {noise.shape}.")
-        self.noise = noise
-
-        # infer the change points by using the shapes, by definition the change points
-        # are always the first sample after a signal has ended
-        #
-        # we also check whether two signals are different so the change points are guaranteed
-        self.change_points_list = []
-        for idx, (signal1, signal2) in enumerate(zip(self.signals, self.signals[1:])):
-
-            # check that we actually have a change point
-            if signal1 == signal2:  # no change
-                raise ValueError(f"signals[{idx}] and signals[{idx+1}] are similar and show no change.")
-            self.change_points_list.append(signal1.shape[0]+1)
-
+                                 f"Trend: {general_noise.shape}.")
+        self.noise = general_noise
 
     def render(self):
-        return (np.concatenate([signal.render() for signal in self.signals], axis=0)
-                + self.trend.render()
-                + self.noise.render())
+
+        # create the list of signals
+        rendered_signals = [signal.render_parts() for signal in self.signals]
+
+        # apply the trend and oscillation transitions
+        for idx, (signal_from, signal_to, oscillation_transition, trend_transition) in enumerate(zip(rendered_signals, rendered_signals[1:], self.oscillation_transitions, self.trend_transitions)):
+            oscillation_transition.apply(signal_from['oscillation'], signal_to['oscillation'])
+            trend_transition.apply(signal_from['trend'], signal_to['trend'])
+
+        # sum the signal parts for a complete signals
+        rendered_signals = [Signal.parts_to_signal(signal_parts) for signal_parts in rendered_signals]
+
+        # concatenate the signals and add the general trend and noise
+        return np.concatenate(rendered_signals, axis=0) + self.trend.render() + self.noise.render()
 
     @property
     def shape(self) -> tuple[int,]:
@@ -133,8 +167,10 @@ class ChangeSignal:
         return (sum(signal.shape[0] for signal in self.signals), )
 
     @property
-    def change_points(self) -> list[int]:
-        return self.change_points_list
+    def changepoints(self) -> list[int]:
+
+        # go through the signals and collect their length
+        return list(itertools.accumulate(signal.shape[0] for signal in self.signals))
 
 
 class ChangeSignalMultivariate:
@@ -158,7 +194,7 @@ class ChangeSignalMultivariate:
         self.signal_names = signal_names
 
         # get the change points
-        self.change_points_list = [signal.change_points for signal in signals]
+        self.change_points_list = [signal.changepoints for signal in signals]
 
     def render(self) -> np.ndarray:
         return np.stack([signal.render() for signal in self.signals], axis=0)
@@ -168,8 +204,9 @@ class ChangeSignalMultivariate:
         return len(self.signals), self.signals[0].shape[0]
 
     @property
-    def change_points(self) -> list[list[int]]:
+    def changepoints(self) -> list[list[int]]:
         return self.change_points_list
+
 
 if __name__ == "__main__":
     print('Parts')

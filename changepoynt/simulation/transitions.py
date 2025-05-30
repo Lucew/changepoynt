@@ -1,5 +1,4 @@
 import numpy as np
-import scipy.interpolate as spinter
 
 import changepoynt.simulation.base as base
 import changepoynt.simulation.trends as trends

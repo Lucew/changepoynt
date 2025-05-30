@@ -121,6 +121,17 @@ class Parameter:
         instance._values[self.name] = value
 
 
+class ParameterDistribution:
+
+    @abc.abstractmethod
+    def __init__(self, *args, **kwargs):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def get_parameter(self, prev_value: typing.Union[float, int]) -> typing.Union[float, int]:
+        raise NotImplementedError
+
+
 class SignalPartMeta(type):
 
     def __new__(cls, name, bases, namespace):
@@ -224,10 +235,10 @@ class SignalPart(metaclass=SignalPartMeta):
     def __init__(self, length: int, **kwargs):
 
         # save and check the length
-        minimum_length = 100 if not isinstance(self, BaseTransition) else 0
+        self.minimum_length = 100 if not isinstance(self, BaseTransition) else 0
         length = length
-        if length < minimum_length:
-            raise ValueError(f'Instance class {self.__class__} length is too short: {length} < {minimum_length}.')
+        if length < self.minimum_length:
+            raise ValueError(f'Instance class {self.__class__} length is too short: {length} < {self.minimum_length}.')
         self.length = length
 
         # make a dict that the parameter can fill to save information
@@ -268,7 +279,7 @@ class SignalPart(metaclass=SignalPartMeta):
         return {key: val for key, val in cls._registry.items()}
 
     @classmethod
-    def get_registered_signal_parts_group(cls, group):
+    def get_registered_signal_parts_group(cls, group: typing.Type['SignalPart']):
         return {key: val for key, val in cls._registry.items() if issubclass(val, group)}
 
     @classmethod
@@ -290,6 +301,10 @@ class SignalPart(metaclass=SignalPartMeta):
     @classmethod
     def get_parameters_for_randomizations(cls):
         return {name: param for name, param in cls._parameters.items() if param.use_random}
+
+    @classmethod
+    def get_all_registered_parameters_for_randomization(cls):
+        return {(clsname, paramname): parameter for clsname, clsinstance in cls.get_registered_signal_parts_group(cls).items() for paramname, parameter in clsinstance.get_parameters_for_randomizations().items()}
 
     @classmethod
     def get_possible_transitions(cls, from_object: 'SignalPart', to_object: 'SignalPart'):
@@ -477,16 +492,15 @@ class BaseTransition(SignalPart):
         """
         raise NotImplementedError
 
-    def get_changepoint(self) -> tuple[int, int]:
+    def check_objects(self, from_object: SignalPart, to_object: SignalPart):
         """
-        A function that returns the change point as a range [from, to] with inclusive borders and indices
-        into the signal. Defaults to the end of from_object to the beginning of to_object.
+        This function checks whether two input objects are the ones that were used to specify the transition.
 
-        Overwrite if not applicable
-
-        :return: [from, to]
+        :param from_object: The SignalPart object we want to transition from
+        :param to_object: The SignalPart object we want to transition to
+        :return: Boolean, True if the two objects are the ones specified when creating the transition
         """
-        return self.from_object.shape[0], self.from_object.shape[0]+1
+        return from_object is self.from_object and to_object is self.to_object
 
     def render(self) -> np.ndarray:
         """
@@ -509,6 +523,14 @@ class BaseTransition(SignalPart):
         return transition_values
 
     def apply(self, rendered_from_signal: np.ndarray, rendered_to_signal: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """
+        This function applies the transition function from 'from_object' to 'to_object'.
+        !IMPORTANT! This operation acts inplace.
+
+        :param rendered_from_signal: the array containing the signal values the transition starts from
+        :param rendered_to_signal: the array containing the signal values the transition goes to
+        :return: Changed numpy arrays, modified inplace!
+        """
 
         # check that the signals have been rendered by the objects specified (and not altered)
         from_rendered = self.from_object.render()[-self.transition_length:]

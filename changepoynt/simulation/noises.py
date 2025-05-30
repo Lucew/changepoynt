@@ -1,3 +1,5 @@
+import typing
+
 import numpy as np
 
 from changepoynt.simulation import base
@@ -13,10 +15,20 @@ class NoNoise(base.BaseNoise):
 
 class GaussianNoise(base.BaseNoise):
     std = base.Parameter((float, int), limit=(-np.inf, 0, np.inf), tolerance=0.05)
-    seed = base.Parameter(int, tolerance=0.1, modifiable=False, use_for_comparison=False)
+
+    def __init__(self, random_state: typing.Optional[np.random.RandomState] = None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # save the random state
+        self.random_state = random_state
+
+        # create default if not applicable
+        if self.random_state is None:
+            self.random_state = np.random.RandomState()
+
 
     def render(self) -> np.ndarray:
-        return self.seed.normal(0.0, self.std, self.length)
+        return self.random_state.normal(0.0, self.std, self.length)
 
 
 if __name__ == "__main__":
