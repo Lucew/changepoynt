@@ -231,11 +231,12 @@ def has_concrete_render(cls):
 
 class SignalPart(metaclass=SignalPartMeta):
     _registry = dict()
+    _minimum_length = 30
 
     def __init__(self, length: int, **kwargs):
 
         # save and check the length
-        self.minimum_length = 100 if not isinstance(self, BaseTransition) else 0
+        self.minimum_length = self._minimum_length if not isinstance(self, BaseTransition) else 0
         length = length
         if length < self.minimum_length:
             raise ValueError(f'Instance class {self.__class__} length is too short: {length} < {self.minimum_length}.')
@@ -371,6 +372,10 @@ class SignalPart(metaclass=SignalPartMeta):
             if name in data:
                 setattr(instance, name, data[name])
         return instance
+
+    @classmethod
+    def get_minimum_length(cls):
+        return cls._minimum_length
 
 
 class BaseOscillation(SignalPart):
