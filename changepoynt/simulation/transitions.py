@@ -2,6 +2,7 @@ import numpy as np
 
 import changepoynt.simulation.base as base
 import changepoynt.simulation.trends as trends
+import changepoynt.simulation.oscillations as oscillations
 
 
 class NoTransition(base.BaseTransition):
@@ -94,4 +95,5 @@ if __name__ == '__main__':
     plt.plot(array2)
     plt.show()
 
-    print(base.SignalPart.get_possible_transitions(trend1, trend2))
+    print(base.SignalPart.get_possible_transitions(trend1.__class__, trend2.__class__))
+    print(base.SignalPart.get_all_possible_transitions())

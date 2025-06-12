@@ -1,6 +1,8 @@
 import typing
 import abc
-from inspect import isclass
+import inspect
+import functools
+from abc import abstractmethod
 
 import numpy as np
 
@@ -132,6 +134,17 @@ class ParameterDistribution:
         raise NotImplementedError
 
 
+class RandomSelector:
+
+    @abc.abstractmethod
+    def __init__(self, *args, **kwargs):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def get_selection(self, prev_signal_part: str, choices: list[str]) -> str:
+        raise NotImplementedError
+
+
 class SignalPartMeta(type):
 
     def __new__(cls, name, bases, namespace):
@@ -175,7 +188,7 @@ class SignalPartMeta(type):
                     raise TypeError(f"Attribute '{object_name}' of class '{cls.__name__}' has to be of type tuple. Currently: {type(object_list)}.")
                 if len(object_list) == 0:
                     raise ValueError(f"Attribute '{object_name}' of class '{cls.__name__}' has to specify at least one object.")
-                if not all(isclass(objects) and issubclass(objects, SignalPart) and isclass(objects) for objects in object_list):
+                if not all(inspect.isclass(objects) and issubclass(objects, SignalPart) and inspect.isclass(objects) for objects in object_list):
                     raise TypeError(f"All objects {object_name} of class '{cls.__name__}' have to be a subclass of SignalPart. Currently: {object_list}.")
 
         # Check for derived parameters and verify compute method exists
@@ -229,9 +242,26 @@ def has_concrete_render(cls):
     return True
 
 
+def check_first_arg_class():
+    """
+    Decorator to check if the first argument (typically 'self') is an instance of expected_class.
+    """
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            if not args:
+                raise ValueError("Function called without positional arguments.")
+            if args[0] != SignalPart:
+                raise TypeError(f"First argument must be class {SignalPart}, got {args[0]} instead.")
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
 class SignalPart(metaclass=SignalPartMeta):
     _registry = dict()
     _minimum_length = 30
+    type_name: str
 
     def __init__(self, length: int, **kwargs):
 
@@ -247,6 +277,7 @@ class SignalPart(metaclass=SignalPartMeta):
         self.parameter_info = {}
 
         # go through the parameters and check whether they have been specified in the keywords
+        # self._parameters will be set by the metaclass
         for name, param in self._parameters.items():
 
             # save the default values and the limits
@@ -276,46 +307,85 @@ class SignalPart(metaclass=SignalPartMeta):
             raise ValueError(f"Your specified derived parameters: {derived_parameters}.")
 
     @classmethod
+    @check_first_arg_class()
+    def get_immediate_subclasses(cls):
+       return cls.__subclasses__()
+
+    @classmethod
+    @check_first_arg_class()
     def get_registered_signal_parts(cls):
         return {key: val for key, val in cls._registry.items()}
 
     @classmethod
+    @check_first_arg_class()
     def get_registered_signal_parts_group(cls, group: typing.Type['SignalPart']):
         return {key: val for key, val in cls._registry.items() if issubclass(val, group)}
 
     @classmethod
+    @check_first_arg_class()
     def get_registered_signal_parts_grouped(cls):
 
         # get all the immediate subclasses
-        subclasses = cls.__subclasses__()
+        subclasses = cls.get_immediate_subclasses()
 
         # find the accompanying classes
         return {group.__name__: cls.get_registered_signal_parts_group(group) for group in subclasses}
 
     @classmethod
-    def get_parameters(cls):
-        return cls._parameters
+    @check_first_arg_class()
+    def get_possible_transitions(cls, from_class: typing.Type['SignalPart'], to_class: typing.Type['SignalPart']):
 
-    def get_parameter_value(self, name):
-        return self._values[name]
-
-    @classmethod
-    def get_parameters_for_randomizations(cls):
-        return {name: param for name, param in cls._parameters.items() if param.use_random}
-
-    @classmethod
-    def get_all_registered_parameters_for_randomization(cls):
-        return {(clsname, paramname): parameter for clsname, clsinstance in cls.get_registered_signal_parts_group(cls).items() for paramname, parameter in clsinstance.get_parameters_for_randomizations().items()}
-
-    @classmethod
-    def get_possible_transitions(cls, from_object: 'SignalPart', to_object: 'SignalPart'):
+        # get the possible transitions
         possible_transitions = {}
         for name, transition_class in cls.get_registered_signal_parts_group(BaseTransition).items():
-            try:
-                transition = transition_class(transition_length=100, from_object=from_object, to_object=to_object)
-                possible_transitions[name] = transition
-            except TypeRestrictedError:
+            # make a type annotation so the linter is not confused
+            transition_class: BaseTransition
+
+            # check which transitions allow us to transition between the two classes
+            if not any(issubclass(from_class, allowed) for allowed in transition_class.allowed_from):
                 continue
+            if not any(issubclass(to_class, allowed) for allowed in transition_class.allowed_to):
+                continue
+
+            # check whether both from and to belong to the same signal part type (trend, oscillation, noise)
+            if not any(issubclass(from_class, target_class) and issubclass(to_class, target_class) for target_class in cls.get_immediate_subclasses()):
+                continue
+
+            # save the transition class
+            possible_transitions[name] = transition_class
+        return possible_transitions
+
+    @classmethod
+    @check_first_arg_class()
+    def get_all_possible_transitions(cls):
+
+        # get all the SignalParts
+        signal_parts = cls.get_registered_signal_parts_grouped()
+
+        # iterate over all possible classes
+        possible_transitions = {}
+        for clsname1, cls1 in ((clsname, class1) for clses in signal_parts.values() for clsname, class1 in
+                               clses.items()):
+            # skip transitions
+            if issubclass(cls1, BaseTransition):
+                continue
+
+            for clsname2, cls2 in ((clsname, class2) for clses in signal_parts.values() for clsname, class2 in
+                                   clses.items()):
+                # skip transitions
+                if issubclass(cls2, BaseTransition):
+                    continue
+
+                # check whether both from and to belong to the same signal part type (trend, oscillation, noise)
+                if not any(issubclass(cls1, target_class) and issubclass(cls2, target_class) for target_class in cls.get_immediate_subclasses()):
+                    continue
+
+                # get the possible transitions
+                possible_transitions[(clsname1, clsname2)] = cls.get_possible_transitions(cls1, cls2)
+
+                # check whether something is off
+                if len(possible_transitions[(clsname1, clsname2)]) == 0:
+                    raise NotImplementedError(f'There is no possible transition between {cls1} and {cls2}.')
         return possible_transitions
 
     @property
@@ -374,6 +444,23 @@ class SignalPart(metaclass=SignalPartMeta):
         return instance
 
     @classmethod
+    def get_parameters(cls):
+        return cls._parameters
+
+    def get_parameter_value(self, name):
+        return self._values[name]
+
+    @classmethod
+    def get_parameters_for_randomizations(cls):
+        return {name: param for name, param in cls._parameters.items() if param.use_random}
+
+    @classmethod
+    def get_all_registered_parameters_for_randomization(cls):
+        return {(clsname, paramname): parameter for clsname, clsinstance in
+                cls.get_registered_signal_parts_group(cls).items() for paramname, parameter in
+                clsinstance.get_parameters_for_randomizations().items()}
+
+    @classmethod
     def get_minimum_length(cls):
         return cls._minimum_length
 
@@ -384,7 +471,7 @@ class BaseOscillation(SignalPart):
     a sine, or a triangle function. Every Oscillation has to have a render function to be called when compiling the
     final signal.
     """
-
+    type_name = "oscillation"
     @abc.abstractmethod
     def render(self, *args, **kwargs) -> np.ndarray:
         raise NotImplementedError
@@ -395,7 +482,7 @@ class BaseTrend(SignalPart):
     This class builds the base for a Trend. For example, this can be constant, a line with a slope. The trend
     is always additive.
     """
-
+    type_name = "trend"
     @abc.abstractmethod
     def render(self, *args, **kwargs) -> np.ndarray:
         raise NotImplementedError
@@ -406,7 +493,7 @@ class BaseNoise(SignalPart):
     This class builds the base for a Noise signal. Noise will be always additive and is assigned to every
     Signal. It has to have a render function to be called when compiling the signal.
     """
-
+    type_name = "noise"
     @abc.abstractmethod
     def render(self) -> np.ndarray:
         raise NotImplementedError
@@ -422,7 +509,7 @@ class BaseTransition(SignalPart):
     """
     allowed_from: tuple[typing.Type[SignalPart], ...]
     allowed_to: tuple[typing.Type[SignalPart], ...]
-
+    name = "transition"
     @property
     @abc.abstractmethod
     def allowed_from(self):
@@ -470,6 +557,9 @@ class BaseTransition(SignalPart):
         if from_object == to_object:
             raise ValueError(f"From object and to object cannot be equal for a transition.")
 
+        # check whether both from and to belong to the same signal part type (trend, oscillation, noise)
+        if not any(isinstance(from_object, target_class) and isinstance(to_object, target_class) for target_class in SignalPart.get_immediate_subclasses()):
+            raise TypeError(f"'{from_object.__class__=}' and '{to_object.__class__=}' have to both be of the same SignalPartType (One of: {SignalPart.get_immediate_subclasses()}).")
 
         # save the object we are coming from
         self.from_object = from_object

@@ -9,32 +9,8 @@ from changepoynt.simulation import base
 from changepoynt.simulation import oscillations
 from changepoynt.simulation import trends
 from changepoynt.simulation import noises
+from changepoynt.simulation import randomizers as rds
 from changepoynt.simulation import signals
-
-
-class ConditionalGaussianDistribution(base.ParameterDistribution):
-
-    def __init__(self, standard_deviation: float, random_generator: typing.Optional[np.random.Generator] = None):
-
-        # save the standard deviation
-        self.std = standard_deviation
-        self.random_generator = random_generator
-
-        # make the default random state
-        if self.random_generator is None:
-            self.random_generator = np.random.default_rng()
-
-    def get_parameter(self, previous_value: typing.Union[float, int] = 0.0) -> typing.Union[float, int]:
-        return self.random_generator.normal(previous_value, self.std)
-
-
-class NoDistribution(base.ParameterDistribution):
-
-    def __init__(self):
-        super().__init__()
-
-    def get_parameter(self, prev_value: typing.Union[float, int]) -> typing.Union[float, int]:
-        return prev_value
 
 
 class ChangeGenerator:
@@ -238,23 +214,22 @@ class ChangeGenerator:
 class ChangeSignalGenerator:
 
     def __init__(self,
-                 oscillations_weights: dict[str: int] = None,
-                 trend_weights: dict[str: int] = None,
-                 noise_weights: dict[str: int] = None,
+                 oscillation_selectors: dict[str: base.RandomSelector] = None,
+                 initial_oscillation_selector: base.RandomSelector = None,
+                 default_oscillation_selector: base.RandomSelector = None,
+                 trend_selectors: dict[str: base.RandomSelector] = None,
+                 initial_trend_selector: base.RandomSelector = None,
+                 default_trend_selector: base.RandomSelector = None,
+                 noise_selectors: dict[str: base.RandomSelector] = None,
+                 initial_noise_selector: base.RandomSelector = None,
+                 default_noise_selector: base.RandomSelector = None,
                  parameter_distributions: dict[tuple[str, str]: base.ParameterDistribution] = None,
                  default_parameter_distribution: base.ParameterDistribution = None,
+                 transition_selectors: dict[tuple[str, str]: base.RandomSelector] = None,
+                 default_transition_selector: base.RandomSelector = None,
                  random_generator: np.random.Generator = None) -> None:
 
-        # get all the oscillations that are implemented
-        self.possible_oscillations = base.SignalPart.get_registered_signal_parts_group(base.BaseOscillation)
-        self.possible_trends = base.SignalPart.get_registered_signal_parts_group(base.BaseTrend)
-        self.possible_noises = base.SignalPart.get_registered_signal_parts_group(base.BaseNoise)
-
-        # make default weights or check the existing ones
-        self.oscillations_weights = self.process_input_weights(oscillations_weights, self.possible_oscillations)
-        self.trend_weights = self.process_input_weights(trend_weights, self.possible_trends)
-        self.noise_weights = self.process_input_weights(noise_weights, self.possible_noises)
-
+        # initialize general variables ---------------------------------------------------------------------------------
         # save the random state
         if random_generator is None:
             self.random_generator = np.random.default_rng()
@@ -263,12 +238,66 @@ class ChangeSignalGenerator:
         else:
             raise TypeError("'random_state' must be either None or a np.random.Generator.")
 
+        # initialize the random signal selection -----------------------------------------------------------------------
+
+        # get the possible classes for each signal part
+        self.possible_parts = {'trend': base.SignalPart.get_registered_signal_parts_group(base.BaseTrend),
+                               'noise': base.SignalPart.get_registered_signal_parts_group(base.BaseNoise),
+                               'oscillation': base.SignalPart.get_registered_signal_parts_group(base.BaseOscillation)}
+
+        # create the default values for the oscillation initial selector
+        if initial_oscillation_selector is None:
+            initial_oscillation_selector = rds.RandomSelector(random_generator=self.random_generator)
+        # create the default values for the default oscillation selector
+        if default_oscillation_selector is None:
+            default_oscillation_selector = rds.ConditionalContinuousSelector(keep_probability=0.75,
+                                                                             random_generator=self.random_generator)
+        # create the default value for the oscillation selectors
+        if oscillation_selectors is None:
+            oscillation_selectors = {}
+        # create the oscillation selector
+        oscillation_selectors = self.handle_signal_part_selectors(oscillation_selectors, initial_oscillation_selector,
+                                                                  default_oscillation_selector, base.BaseOscillation)
+
+
+        # create the default values for the trend initial selector
+        if initial_trend_selector is None:
+            initial_trend_selector = rds.RandomSelector(random_generator=self.random_generator)
+        # create the default values for the default trend selector
+        if default_trend_selector is None:
+            default_trend_selector = rds.ConditionalContinuousSelector(keep_probability=0.75,
+                                                                       random_generator=self.random_generator)
+        # create the default value for the oscillation selectors
+        if trend_selectors is None:
+            trend_selectors = {}
+        # create the trend selector
+        trend_selectors = self.handle_signal_part_selectors(trend_selectors, initial_trend_selector,
+                                                            default_trend_selector, base.BaseTrend)
+
+
+        # create the default values for the noise initial selector
+        if initial_noise_selector is None:
+            initial_noise_selector = rds.StaticSelector('GaussianNoise')
+        # create the default values for the default noise selectors
+        if default_noise_selector is None:
+            default_noise_selector = rds.StaticSelector('GaussianNoise')
+        # create the default value for the oscillation selectors
+        if noise_selectors is None:
+            noise_selectors = {}
+        # create the noise selector
+        noise_selectors = self.handle_signal_part_selectors(noise_selectors, initial_noise_selector,
+                                                            default_noise_selector, base.BaseNoise)
+
+        # save all the selectors using their names
+        self.selectors = {'trend': trend_selectors, 'noise': noise_selectors, 'oscillation': oscillation_selectors}
+
+        # initialize random parameter selection ------------------------------------------------------------------------
         # create the default or save the default_parameter_distributions
         if default_parameter_distribution is None:
-            self.default_parameter_distribution = ConditionalGaussianDistribution(standard_deviation=20.0,
-                                                                                  random_generator=self.random_generator)
+            default_parameter_distribution = rds.ConditionalGaussianDistribution(standard_deviation=20.0,
+                                                                                 random_generator=self.random_generator)
         elif isinstance(default_parameter_distribution, base.ParameterDistribution):
-            self.default_parameter_distribution = default_parameter_distribution
+            default_parameter_distribution = default_parameter_distribution
         else:
             raise TypeError("'default_parameter_distribution' must be either None or a ParameterDistribution.")
 
@@ -296,25 +325,92 @@ class ChangeSignalGenerator:
             else:
                 raise KeyError(f"You specified a distribution for the combo (class, parameter): '{key}' in the 'parameter_distributions'. This combo is not registered.")
 
-    @staticmethod
-    def create_default_weights(possible_scenarios: dict):
-        return collections.defaultdict(lambda: 100//len(possible_scenarios))
+        # initialize random transition selection -----------------------------------------------------------------------
 
-    def process_input_weights(self, input_weights: typing.Union[dict[str: int], None],
-                              possible_scenarios: dict) -> dict[str: int]:
+        # set the default selector
+        if default_transition_selector is None:
+            default_transition_selector = rds.RandomSelector(random_generator=self.random_generator)
+        elif isinstance(default_transition_selector, base.RandomSelector):
+            default_transition_selector = default_transition_selector
+        else:
+            raise TypeError("'default_transition_selector' must be either None or a RandomSelector.")
 
-        # make the default scenario
-        if input_weights is None:
-            return self.create_default_weights(possible_scenarios)
+        # get all the transitions that are registered
+        self.possible_transitions = base.SignalPart.get_all_possible_transitions()
 
-        # check whether
-        return input_weights
+        # save the default parameter distribution
+        self.transition_selectors = collections.defaultdict(lambda: default_transition_selector)
 
-    def generate_from_length(self, min_length: int, max_length: int, parts: int) -> signals.ChangeSignal:
+        # create the default transition_selectors
+        if transition_selectors is None:
+            transition_selectors = {}
+
+        # overwrite the specified selectors
+        for key, selector in transition_selectors.items():
+
+            # the key has to be existing
+            if key not in self.possible_transitions:
+                raise KeyError(f"{key=} in 'transition_selectors' seems to specify an invalid transition.")
+
+            # update the dictionary
+            self.transition_selectors[key] = selector
+
+    def handle_signal_part_selectors(self,
+                                     selectors: dict[str: base.RandomSelector],
+                                     initial_selector: base.RandomSelector,
+                                     default_selector: base.RandomSelector,
+                                     signal_part_subclass: typing.Type[base.SignalPart]) \
+            -> dict[str: base.RandomSelector]:
+
+        # check that the selectors have the right type
+        if not isinstance(initial_selector, base.RandomSelector):
+            raise TypeError(f"'initial_{signal_part_subclass.type_name}_selector' must be an instance of {base.RandomSelector}.")
+        if not isinstance(default_selector, base.RandomSelector):
+            raise TypeError(f"'initial_{signal_part_subclass.type_name}_selector' must be an instance of {base.RandomSelector}.")
+
+        # get the possible signal parts
+        possible_signal_parts = self.possible_parts[signal_part_subclass.type_name]
+
+        # save the default parameter distribution
+        output_selectors = {name: default_selector for name, classed in possible_signal_parts.items()}
+
+        # create the initial_signal_selector and set it
+        output_selectors[None] = initial_selector
+
+        # overwrite the specified selectors
+        for key, selector in selectors.items():
+
+            if not isinstance(selector, base.RandomSelector):
+                raise TypeError(f"{key=} in '{signal_part_subclass.type_name}_selectors' must be an instance of {base.RandomSelector}.")
+
+            # check whether the key exists
+            if key not in possible_signal_parts:
+                raise KeyError(f"{key=} in 'signal_selectors' seems to specify an invalid SignalPart of type {signal_part_subclass}.")
+
+            # update the dictionary
+            output_selectors[key] = selector
+        return output_selectors
+
+    def generate_initial_signal(self):
+
+        # get the initial signal parts
+        signal_parts = {part_name: self.selectors[part_name][None].get_selection("", choices=list(self.possible_parts[part_name].keys())) for part_name in self.selectors.keys()}
+        print(signal_parts)
+
+    def generate_from_events(self, event_list: list[int,]) -> signals.ChangeSignal:
         pass
 
 
 if __name__ == '__main__':
+
+    # make a change signal generator
+    csg = ChangeSignalGenerator()
+    csg.generate_initial_signal()
+    exit()
+
+    # get the subclasses
+    print(base.SignalPart.get_all_possible_transitions())
+
     cpg = ChangeGenerator(length=10000)
     _pts = cpg.generate_random_points(maximum_value=100, minimum_distance=10)
     print(_pts)
