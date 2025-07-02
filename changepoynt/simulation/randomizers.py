@@ -5,36 +5,158 @@ import numpy as np
 from changepoynt.simulation import base
 
 
-class ConditionalGaussianDistribution(base.ParameterDistribution):
+class ContinuousConditionalGaussianDistribution(base.ParameterDistribution):
     """
     This class models a conditional gaussian that is conditioned using the previous value as a mean.
     The user can specify the standard deviation around this mean. If no condition is given the previous value is assumed
     to be zero.
     """
 
-    def __init__(self, standard_deviation: float, random_generator: typing.Optional[np.random.Generator] = None):
+    def __init__(self, standard_deviation: float, minimum: float = None, maximum: float = None, default_mean: float = 0.0,
+                 random_generator: typing.Optional[np.random.Generator] = None):
+        super().__init__(minimum, maximum, random_generator)
+
+        # save the variables
+        self.std = standard_deviation
+        self.default_mean = default_mean
+
+    def generate_random_number(self, previous_value: typing.Union[float, int] = None) -> float:
+        # set the default value if necessary
+        if previous_value is None:
+            previous_value = self.default_mean
+        return self.random_generator.normal(previous_value, self.std)
+
+
+class ContinuousGaussianDistribution(base.ParameterDistribution):
+    """
+    This class models a conditional gaussian with a specifiable mean.
+    """
+
+    def __init__(self, standard_deviation: float, minimum: float = None, maximum: float = None, default_mean: float = 0.0,
+                 random_generator: typing.Optional[np.random.Generator] = None):
+        super().__init__(minimum, maximum, random_generator)
+
+        # save the variables
+        self.std = standard_deviation
+        self.default_mean = default_mean
+
+    def generate_random_number(self, previous_value: typing.Union[float, int] = None) -> float:
+        # set the default value if necessary
+        if previous_value is None:
+            previous_value = self.default_mean
+        return self.random_generator.normal(previous_value, self.std)
+
+
+class DiscreteConditionalGaussianDistribution(base.ParameterDistribution):
+    """
+    This class models a conditional gaussian that is conditioned using the previous value as a mean.
+    The user can specify the standard deviation around this mean. If no condition is given the previous value is assumed
+    to be zero.
+    """
+
+    def __init__(self, standard_deviation: float, minimum: float = None, maximum: float = None,
+                 default_mean: float = 0.0, random_generator: typing.Optional[np.random.Generator] = None):
+        super().__init__(minimum, maximum, random_generator)
+
+        # save the variables
+        self.std = standard_deviation
+        self.default_mean = default_mean
+
+    def generate_random_number(self, previous_value: typing.Union[float, int] = None) -> int:
+        # set the default value if necessary
+        if previous_value is None:
+            previous_value = self.default_mean
+        return round(self.random_generator.normal(previous_value, self.std))
+
+
+class DiscretePoissonDistribution(base.ParameterDistribution):
+    """
+    This class models a conditional gaussian that is conditioned using the previous value as a mean.
+    The user can specify the standard deviation around this mean. If no condition is given the previous value is assumed
+    to be zero.
+    """
+
+    def __init__(self, rate: float, minimum: float, maximum: float,
+                 random_generator: typing.Optional[np.random.Generator] = None):
+        super().__init__(minimum, maximum, random_generator)
+
+        # save the variables
+        self.rate = rate
+
+    def generate_random_number(self, previous_value: typing.Union[float, int] = None) -> int:
+        return self.random_generator.poisson(self.rate)
+
+
+class ContinuousConditionalUniformDistribution(base.ParameterDistribution):
+    """
+    This class models a uniform distribution that is conditioned on the previous value as a mean.
+    The user can specify a range around the mean value. If no condition is given the previous value is assumed
+    to be zero.
+    """
+
+    def __init__(self, uniform_range: float,  minimum: float, maximum: float,
+                 random_generator: typing.Optional[np.random.Generator] = None):
+        super().__init__(minimum, maximum, random_generator)
 
         # save the standard deviation
-        self.std = standard_deviation
-        self.random_generator = random_generator
+        self.range = uniform_range
 
-        # make the default random state
-        if self.random_generator is None:
-            self.random_generator = np.random.default_rng()
+    def generate_random_number(self, previous_value: typing.Union[float, int] = 0.0) -> float:
+        return self.random_generator.uniform(previous_value-self.range/2, previous_value+self.range/2)
 
-    def get_parameter(self, previous_value: typing.Union[float, int] = 0.0) -> typing.Union[float, int]:
-        return self.random_generator.normal(previous_value, self.std)
+
+class ContinuousUniformDistribution(base.ParameterDistribution):
+    """
+    This class models a uniform distribution. The values will be between minimum and maximum.
+    """
+
+    def __init__(self, minimum: float, maximum: float,
+                 random_generator: typing.Optional[np.random.Generator] = None):
+        super().__init__(minimum, maximum, random_generator)
+
+    def generate_random_number(self, previous_value: typing.Union[float, int] = 0.0) -> typing.Union[float, int]:
+        return self.random_generator.uniform(self.minimum, self.maximum)
+
+
+class DiscreteConditionalUniformDistribution(base.ParameterDistribution):
+
+    """
+    This class models a uniform distribution. The user can specify a range around a previous value.
+    If no condition is given the distribution will output any values between minimum and maximum.
+    """
+    def __init__(self, uniform_range: int, minimum: float, maximum: float, random_generator: typing.Optional[np.random.Generator] = None):
+        super().__init__(minimum, maximum, random_generator)
+        self.range = uniform_range
+
+    def generate_random_number(self, previous_value: typing.Union[float, int] = None) -> int:
+        if previous_value is None:
+            return self.random_generator.randint(self.minimum, self.maximum)
+        return self.random_generator.randint(int(max(previous_value-self.range, self.minimum)), int(min(previous_value + self.range+1, self.maximum+1)))
+
+
+class DiscreteUniformDistribution(base.ParameterDistribution):
+
+    """
+    This class models a uniform distribution. The user can specify a range around a previous value.
+    If no condition is given the distribution will output any values between minimum and maximum.
+    """
+    def __init__(self, minimum: float, maximum: float, random_generator: typing.Optional[np.random.Generator] = None):
+        super().__init__(minimum, maximum, random_generator)
+
+    def generate_random_number(self, previous_value: typing.Union[float, int] = None) -> int:
+        return self.random_generator.integers(self.minimum, self.maximum, endpoint=True, dtype=int)
 
 
 class NoDistribution(base.ParameterDistribution):
     """
     This class models no distribution. The previous value is just returned.
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self, value: typing.Union[float, int]):
+        super().__init__(minimum=value, maximum=value)
+        self.value = value
 
-    def get_parameter(self, prev_value: typing.Union[float, int]) -> typing.Union[float, int]:
-        return prev_value
+    def generate_random_number(self, prev_value: typing.Union[float, int]) -> typing.Union[float, int]:
+        return self.value
 
 
 class ConditionalContinuousSelector(base.RandomSelector):

@@ -5,6 +5,7 @@ import scipy.signal as spsig
 import scipy.special as spspec
 
 from changepoynt.simulation import base
+import changepoynt.simulation.randomizers as rds
 
 
 class NoOscillation(base.BaseOscillation):
@@ -16,9 +17,9 @@ class NoOscillation(base.BaseOscillation):
 
 
 class Periodic(base.BaseOscillation):
-    periods = base.Parameter(int, limit=(1, 100), tolerance=0.5,use_for_comparison=False)
-    amplitude = base.Parameter((float, int), limit=(-np.inf, np.inf), tolerance=0.1, default_value=1.0)
-    wavelength = base.Parameter(float, limit=(5, np.inf), derived=True, tolerance=0.1, modifiable=False, use_random=False, limit_error_explanation="We require at least 5 samples per period. Either specify less periods or greater length.")
+    periods = base.Parameter(int, limit=(1, 100), tolerance=0.5, use_for_comparison=False, default_parameter_distribution=rds.DiscretePoissonDistribution(3, 1, 100))
+    amplitude = base.Parameter((float, int), limit=(-np.inf, np.inf), tolerance=0.1, default_value=1.0, default_parameter_distribution=rds.ContinuousConditionalGaussianDistribution(standard_deviation=7, default_mean=1.0))
+    wavelength = base.Parameter(float, limit=(5.0, np.inf), derived=True, tolerance=0.1, modifiable=False, use_random=False, limit_error_explanation="We require at least 5 samples per period. Either specify less periods or greater length.")
 
     def compute_wavelength(self):
         return self.length / self.periods
@@ -34,7 +35,7 @@ class SineOscillation(Periodic):
 
 
 class DirichletOscillation(Periodic):
-    periodicity = base.Parameter(int, limit=(1, np.inf), tolerance=1)
+    periodicity = base.Parameter(int, limit=(1, np.inf), tolerance=1, default_parameter_distribution=rds.DiscreteConditionalGaussianDistribution(1, minimum=1, default_mean=2.0))
 
     @staticmethod
     def compute_start_end(periods, periodicity):
@@ -68,7 +69,7 @@ class DirichletOscillation(Periodic):
 
 
 class SquareOscillation(Periodic):
-    duty = base.Parameter((float, int), limit=(0, 1), tolerance=0.05, default_value=0.5)
+    duty = base.Parameter((float, int), limit=(0, 1), tolerance=0.05, default_value=0.5, default_parameter_distribution=rds.ContinuousUniformDistribution(0.0, 1.0))
     wavelength = base.Parameter(float, limit=(2, np.inf), derived=True, tolerance=0.1, modifiable=False, use_random=False, limit_error_explanation="We require at least 2 samples per period. Either specify less periods or greater length.")
 
     def render(self) -> np.ndarray:
@@ -83,7 +84,7 @@ class SquareOscillation(Periodic):
 
 
 class SawtoothOscillation(Periodic):
-    width = base.Parameter((float, int), limit=(0, 1), tolerance=0.05)
+    width = base.Parameter((float, int), limit=(0, 1), tolerance=0.05, default_parameter_distribution=rds.ContinuousUniformDistribution(0.0, 1.0))
     wavelength = base.Parameter(float, limit=(6, np.inf), derived=True, tolerance=0.1, use_random=False, modifiable=False, limit_error_explanation="We require at least 6 samples per period. Either specify less periods or greater length.")
 
     def render(self) -> np.ndarray:

@@ -3,6 +3,7 @@ import typing
 import numpy as np
 
 from changepoynt.simulation import base
+import changepoynt.simulation.randomizers as rds
 
 
 class NoNoise(base.BaseNoise):
@@ -14,28 +15,19 @@ class NoNoise(base.BaseNoise):
 
 
 class GaussianNoise(base.BaseNoise):
-    std = base.Parameter((float, int), limit=(-np.inf, 0, np.inf), tolerance=0.05)
-
-    def __init__(self, random_state: typing.Optional[np.random.RandomState] = None, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # save the random state
-        self.random_state = random_state
-
-        # create default if not applicable
-        if self.random_state is None:
-            self.random_state = np.random.RandomState()
-
+    std = base.Parameter((float, int), limit=(0, np.inf), tolerance=0.05, default_parameter_distribution=rds.NoDistribution(0.05))
+    seed = base.Parameter((int,), limit=(0, np.inf), default_parameter_distribution=rds.DiscreteUniformDistribution(0, 10000))
 
     def render(self) -> np.ndarray:
-        return self.random_state.normal(0.0, self.std, self.length)
+        random_generator = np.random.default_rng(self.seed)
+        return random_generator.normal(0.0, self.std, self.length)
 
 
 if __name__ == "__main__":
-    n1 = GaussianNoise(100, mean=0.0, std=0.1, seed=42)
-    n2 = GaussianNoise(100, mean=0.0, std=0.1, seed=1100)
-    n3 = GaussianNoise(100, mean=20, std=0.1, seed=1100)
-    print(n1 == n2) # true
+    n1 = GaussianNoise(100, std=10, seed=4)
+    n2 = GaussianNoise(100, std=1000, seed=4)
+    n3 = GaussianNoise(100, std=1000, seed=3)
+    print(n1 == n2) # false
     print(n1 == n3) # false
-    print(n1 != n2) # false
+    print(n1 != n2) # true
     print(n1 != n3) # true

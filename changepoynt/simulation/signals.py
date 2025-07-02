@@ -56,6 +56,11 @@ class Signal:
     def parts_to_signal(signal_parts: dict[str: tuple[np.ndarray, np.ndarray, np.ndarray]]) -> np.ndarray:
         return sum(signal_parts.values())
 
+    def get_randomizeable_parameter_values(self) -> dict[str: dict[str: typing.Any]]:
+        return {'oscillation': self.oscillation.get_parameters_for_randomizations_values(),
+                'trend': self.trend.get_parameters_for_randomizations_values(),
+                'noise': self.trend.get_parameters_for_randomizations_values()}
+
     def render(self) -> np.ndarray:
         return self.parts_to_signal(self.render_parts())
 
@@ -63,6 +68,10 @@ class Signal:
     def shape(self) -> tuple[int,]:
         # we have tested noise and signal to be the same shape when constructing this class
         return self.oscillation.shape
+
+    @classmethod
+    def from_dict(cls, params: dict[str: base.SignalPart]) -> 'Signal':
+        return cls(**params)
 
     def __eq__(self, other: "Signal") -> bool:
 

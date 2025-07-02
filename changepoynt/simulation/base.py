@@ -2,9 +2,82 @@ import typing
 import abc
 import inspect
 import functools
-from abc import abstractmethod
+import sys
 
 import numpy as np
+
+
+class ParameterDistribution:
+
+    def __init__(self,
+                 minimum: typing.Optional[typing.Union[float, int]] = None,
+                 maximum: typing.Optional[typing.Union[float, int]] = None,
+                 random_generator: typing.Optional[np.random.Generator] = None,
+                 verbose: bool = False):
+
+        # save the values
+        self.minimum = minimum
+        if self.minimum is None:
+            self.minimum = -np.inf
+        self.maximum = maximum
+        if self.maximum is None:
+            self.maximum = np.inf
+        self.verbose = verbose
+
+        # make the default random state
+        self.random_generator = random_generator
+        if self.random_generator is None:
+            self.random_generator = np.random.default_rng()
+
+        # check whether minimum is smaller than the maximum
+        if self.minimum > self.maximum:
+            raise ValueError(f"{minimum=} must be smaller than maximum {maximum=}.")
+
+        # create some variables to save which class and parameter the distribution is attached too
+        self.class_name = "??"
+        self.parameter_name = "??"
+
+    def set_random_generator(self, random_generator: np.random.Generator) -> 'ParameterDistribution':
+        # protect from setting arbitrary random generator
+        if random_generator is None:
+            return self
+
+        if not isinstance(random_generator, np.random.Generator):
+            raise TypeError(f"{type(random_generator)=} must be an instance of np.random.Generator")
+        self.random_generator = random_generator
+        return self
+
+    @abc.abstractmethod
+    def generate_random_number(self, prev_value: typing.Union[float, int]) -> typing.Union[float, int]:
+        raise NotImplementedError
+
+    def get_parameter(self, prev_value: typing.Union[float, int]) -> typing.Union[float, int]:
+
+        # get the random number from the implementation
+        random_val = self.generate_random_number(prev_value)
+
+        # limit the random number
+        prev_str = "" if self.class_name == "??" else f"Class {self.class_name}, Parameter {self.parameter_name}. "
+        if random_val < self.minimum:
+            if self.verbose:
+                f"{prev_str}Generated {random_val=} for is too low. Setting to minimum value '{self.minimum=}'."
+            random_val = self.minimum
+        if random_val > self.maximum:
+            if self.verbose:
+                f"{prev_str}Generated {random_val=} for is too high. Setting to minimum value '{self.maximum=}'."
+            random_val = self.maximum
+        return random_val
+
+
+class RandomSelector:
+
+    @abc.abstractmethod
+    def __init__(self, *args, **kwargs):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def get_selection(self, prev_signal_part: str, choices: list[str]) -> str:
+        raise NotImplementedError
 
 
 class Parameter:
@@ -16,6 +89,7 @@ class Parameter:
                  modifiable: bool = True,
                  use_for_comparison: bool = True,
                  use_random: bool = True,
+                 default_parameter_distribution: ParameterDistribution = None,
                  limit_error_explanation: str = "",
                  doc: str = ""):
 
@@ -32,6 +106,8 @@ class Parameter:
             raise TypeError(f"Parameter limit must have minimum length of 2. Currently: {len(limit)}.")
         if any(limit1 >= limit2 for limit1, limit2 in zip(limit, limit[1:])):
             raise ValueError(f"Parameter limits must be strictly increasing. Currently: {limit}.")
+        if any((not type(limitval) or limitval == np.inf) in self.param_type for limitval in limit):
+            raise TypeError(f"All values in limit must be of the same type as the parameter ('{self.param_type}'). Currently: {list(type(limitval) for limitval in limit)} for {limit=}.")
         self.limit = limit
 
         # check the tolerance and save default
@@ -71,13 +147,45 @@ class Parameter:
         self.use_random = use_random
 
         # the name will be set by the SignalPartMetaclass
-        self.name = None
+        self.name = "??"
+        self.class_name = "??"
 
         # save the docstring
         self.doc = doc
 
+        # check the parameter distribution (only if it is a random parameter)
+        if self.use_random:
+
+            # check whether there is one
+            if default_parameter_distribution is None:
+                raise ValueError(f"'default_parameter_distribution' cannot be None for a randomize-able parameter ({self.use_random=}). Please specify a 'default_parameter_distribution' (see traceback).")
+            if not isinstance(default_parameter_distribution, ParameterDistribution):
+                raise TypeError(f"Default parameter distribution must be of type {ParameterDistribution.__name__}. Currently: {type(default_parameter_distribution)=}.")
+
+            # take a guess using the default value
+            try:
+                random_val = default_parameter_distribution.get_parameter(self.default_value)
+            except BaseException as e:
+                exc_type, exc_obj, exc_tb = sys.exc_info()
+                raise ValueError(f"We tried to run the get_parameter method from the 'default_parameter_distribution' using the specified '{self.default_value=}' and an error occurred. Please only specify 'default_parameter_distribution' that runs using the default value.\nOriginal Exception: {e}.\nFile {exc_tb.tb_frame.f_code.co_filename}, line {exc_tb.tb_lineno}")
+
+            # check the random_val for the correct type
+            if type(random_val) not in self.param_type:
+                raise TypeError(f"The '{random_val=}' created by the 'default_parameter_distribution' does not return the correct type ({type(random_val)=}). Possible types: {self.param_type}.")
+
+            # check whether the limits are within the limits of the parameter
+            if default_parameter_distribution.minimum < self.limit[0] or self.limit[-1] < default_parameter_distribution.maximum:
+                raise ValueError(f"The 'default_parameter_distribution' minimum and maximum is outside of the current {self.limit=}: From '{default_parameter_distribution.minimum}' to '{default_parameter_distribution.maximum}'.")
+
+            # safe the parameter distribution
+            self.default_parameter_distribution = default_parameter_distribution
+
+            # set the names of the default parameter distribution
+            self.default_parameter_distribution.parameter_name = self.name
+            self.default_parameter_distribution.class_name = self.class_name
+
     def get_information(self):
-        return {'limit': self.limit, 'tolerance': self.tolerance, 'default_value': self.default_value}
+        return {'limit': self.limit, 'tolerance': self.tolerance, 'default_value': self.default_value, 'type': self.param_type}
 
     def __get__(self, instance, owner):
         if instance is None:
@@ -116,33 +224,11 @@ class Parameter:
 
         # check the type of the set value
         if not any(isinstance(value, paramtype) for paramtype in self.param_type):
-            raise TypeError(f"Parameter '{self.name}' must be one of {self.param_type}. Currently: {type(value)}.")
+            raise TypeError(f"Parameter '{self.name}' for class '{instance.__class__}' must be one of {self.param_type}. Currently: {type(value)}.")
 
         # set the value of the instance and not of the parameter
         # otherwise it will be set globally for all instances of this class
         instance._values[self.name] = value
-
-
-class ParameterDistribution:
-
-    @abc.abstractmethod
-    def __init__(self, *args, **kwargs):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def get_parameter(self, prev_value: typing.Union[float, int]) -> typing.Union[float, int]:
-        raise NotImplementedError
-
-
-class RandomSelector:
-
-    @abc.abstractmethod
-    def __init__(self, *args, **kwargs):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def get_selection(self, prev_signal_part: str, choices: list[str]) -> str:
-        raise NotImplementedError
 
 
 class SignalPartMeta(type):
@@ -158,6 +244,7 @@ class SignalPartMeta(type):
         # set the name of the parameters
         for param_name, param in parameters.items():
             param.name = param_name
+            param.class_name = name
 
         # inherit parameters from base classes (base classes are build first!, so the parameter is always
         # the latest defined one)
@@ -293,7 +380,7 @@ class SignalPart(metaclass=SignalPartMeta):
             elif param.default_value is not None:
                 setattr(self, name, param.default_value)
             else:
-                raise ValueError(f"Missing parameter: {name}.")
+                raise ValueError(f"Missing parameter: {name}. Please specify when constructing the object of type {type(self).__name__}.")
 
 
         # check that all kwargs are parameters
@@ -329,7 +416,7 @@ class SignalPart(metaclass=SignalPartMeta):
         subclasses = cls.get_immediate_subclasses()
 
         # find the accompanying classes
-        return {group.__name__: cls.get_registered_signal_parts_group(group) for group in subclasses}
+        return {group.type_name: cls.get_registered_signal_parts_group(group) for group in subclasses}
 
     @classmethod
     @check_first_arg_class()
@@ -427,20 +514,7 @@ class SignalPart(metaclass=SignalPartMeta):
 
     @classmethod
     def from_dict(cls, data):
-        # Only non-derived parameters go in constructor
-        ctor_args = {
-            name: param
-            for name, param in cls._parameters.items()
-            if not param.derived and name in data
-        }
-        instance = cls(**ctor_args)
-
-        # Optional: allow updating modifiable fields post-construction
-        for name, param in cls._parameters.items():
-            if param.derived or not param.modifiable:
-                continue
-            if name in data:
-                setattr(instance, name, data[name])
+        instance = cls(**data)
         return instance
 
     @classmethod
@@ -454,11 +528,15 @@ class SignalPart(metaclass=SignalPartMeta):
     def get_parameters_for_randomizations(cls):
         return {name: param for name, param in cls._parameters.items() if param.use_random}
 
+    def get_parameters_for_randomizations_values(self):
+        return {name: getattr(self, name) for name in self.get_parameters_for_randomizations().keys()}
+
     @classmethod
     def get_all_registered_parameters_for_randomization(cls):
-        return {(clsname, paramname): parameter for clsname, clsinstance in
-                cls.get_registered_signal_parts_group(cls).items() for paramname, parameter in
-                clsinstance.get_parameters_for_randomizations().items()}
+        return {(parttype, clsname, paramname): parameter
+                for parttype, typeclasses in cls.get_registered_signal_parts_grouped().items()
+                for clsname, clsinstance in typeclasses.items()
+                for paramname, parameter in clsinstance.get_parameters_for_randomizations().items()}
 
     @classmethod
     def get_minimum_length(cls):
@@ -509,7 +587,7 @@ class BaseTransition(SignalPart):
     """
     allowed_from: tuple[typing.Type[SignalPart], ...]
     allowed_to: tuple[typing.Type[SignalPart], ...]
-    name = "transition"
+    type_name = "transition"
     @property
     @abc.abstractmethod
     def allowed_from(self):

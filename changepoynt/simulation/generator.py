@@ -11,6 +11,7 @@ from changepoynt.simulation import trends
 from changepoynt.simulation import noises
 from changepoynt.simulation import randomizers as rds
 from changepoynt.simulation import signals
+from changepoynt.simulation import errors as ers
 
 
 class ChangeGenerator:
@@ -20,10 +21,12 @@ class ChangeGenerator:
                  minimum_length: typing.Optional[int] = None,
                  samples_before_change: typing.Optional[typing.Union[int, float]] = None,
                  rate: typing.Optional[typing.Union[int, float]] = None,
-                 random_generator: np.random.Generator = None):
+                 random_generator: np.random.Generator = None,
+                 verbose: bool = False,):
 
         # save the length
         self.length = length
+        self.verbose = verbose
 
         # save the minimum time between events
         if minimum_length is None:
@@ -223,11 +226,20 @@ class ChangeSignalGenerator:
                  noise_selectors: dict[str: base.RandomSelector] = None,
                  initial_noise_selector: base.RandomSelector = None,
                  default_noise_selector: base.RandomSelector = None,
-                 parameter_distributions: dict[tuple[str, str]: base.ParameterDistribution] = None,
-                 default_parameter_distribution: base.ParameterDistribution = None,
+                 parameter_distributions: dict[tuple[str, str, str]: base.ParameterDistribution] = None,
                  transition_selectors: dict[tuple[str, str]: base.RandomSelector] = None,
                  default_transition_selector: base.RandomSelector = None,
-                 random_generator: np.random.Generator = None) -> None:
+                 random_generator: np.random.Generator = None,
+                 verbose: bool = False,
+                 retries: int = 20) -> None:
+
+        # save whether we are verbose
+        self.verbose = verbose
+        self.retries = retries
+
+        # check the retries so it is correct
+        if not isinstance(self.retries, int) or self.retries <= 0:
+            raise TypeError(f"'{retries=}' must be a positive integer.")
 
         # initialize general variables ---------------------------------------------------------------------------------
         # save the random state
@@ -292,20 +304,13 @@ class ChangeSignalGenerator:
         self.selectors = {'trend': trend_selectors, 'noise': noise_selectors, 'oscillation': oscillation_selectors}
 
         # initialize random parameter selection ------------------------------------------------------------------------
-        # create the default or save the default_parameter_distributions
-        if default_parameter_distribution is None:
-            default_parameter_distribution = rds.ConditionalGaussianDistribution(standard_deviation=20.0,
-                                                                                 random_generator=self.random_generator)
-        elif isinstance(default_parameter_distribution, base.ParameterDistribution):
-            default_parameter_distribution = default_parameter_distribution
-        else:
-            raise TypeError("'default_parameter_distribution' must be either None or a ParameterDistribution.")
-
-        # save the default parameter distribution
-        self.parameter_distributions = collections.defaultdict(lambda : default_parameter_distribution)
 
         # get all the parameters that are registered
         self.possible_parameters = base.SignalPart.get_all_registered_parameters_for_randomization()
+
+        # go through all the parameters and get the default distributions (while setting the random generator)
+        self.parameter_distributions = {key: param.default_parameter_distribution.set_random_generator(self.random_generator)
+                                        for key, param in self.possible_parameters.items()}
 
         # create the default value
         if parameter_distributions is None:
@@ -324,7 +329,7 @@ class ChangeSignalGenerator:
                     raise TypeError(f"The distribution for combo (class, parameter): '{key}' in 'parameter_distributions' has to be of type 'ParameterDistribution'. Currently: {type(val)}.")
             else:
                 raise KeyError(f"You specified a distribution for the combo (class, parameter): '{key}' in the 'parameter_distributions'. This combo is not registered.")
-
+        
         # initialize random transition selection -----------------------------------------------------------------------
 
         # set the default selector
@@ -391,21 +396,114 @@ class ChangeSignalGenerator:
             output_selectors[key] = selector
         return output_selectors
 
-    def generate_initial_signal(self):
+    def generate_signal(self, previous_signal_parts: dict[str: str] = None) -> dict[str: str]:
 
-        # get the initial signal parts
-        signal_parts = {part_name: self.selectors[part_name][None].get_selection("", choices=list(self.possible_parts[part_name].keys())) for part_name in self.selectors.keys()}
-        print(signal_parts)
+        # set the default if no previous signal has been specified
+        if previous_signal_parts is None:
+            previous_signal_parts = collections.defaultdict(lambda : None)
+
+        # get the signal parts conditioned on the previous signal parts
+        signal_parts = {part_name: self.selectors[part_name][previous_signal_parts[part_name]].get_selection(previous_signal_parts[part_name], choices=list(self.possible_parts[part_name].keys())) for part_name in self.selectors.keys()}
+        return signal_parts
+
+    def instantiate_random_parameter(self, classname: str, parameter_name: str, parameter: base.Parameter,
+                                     signal_part: str, previous_signal: signals.Signal):
+        # make a print if verbose
+        self.printer(f"Choosing parameter {parameter_name}.", level=1)
+
+        # get the previous value (with default if no previous signal is specified)
+        prev_val = None
+        if previous_signal is not None:
+            prev_val = previous_signal.get_randomizeable_parameter_values()[signal_part][parameter_name]
+
+        # get the minimum value, disallowed values, and maximum value for the parameter
+        mini, *dissalowed_vals, maxi = parameter.get_information()['limit']
+
+        # get the random value from the parameter distribution
+        random_val = self.parameter_distributions[(signal_part, classname, parameter_name)].get_parameter(prev_val)
+
+        # check whether the type of the parameter works
+        allowed_types = parameter.get_information()['type']
+        if type(random_val) not in allowed_types:
+            conversion_func = allowed_types[0]
+            try:
+                random_val = conversion_func(random_val)
+            except TypeError:
+                raise TypeError(f"The distribution for '{parameter_name=} in '{signal_part=}' does return {type(random_val)} but we need one of '{allowed_types}'. Tried converting with '{allowed_types[0]}(random_value)' but did not work.")
+        else:
+            # do nothing for the conversion
+            conversion_func = lambda x: x
+
+        # try to create the parameter multiple times
+        for retry_index in range(self.retries):
+            if random_val in dissalowed_vals:
+                self.printer(
+                    f"Chosen parameter {parameter_name} was disallowed: '{random_val=}'. {dissalowed_vals=}. Going again! Try: {retry_index + 1}/{self.retries}.",
+                    level=2)
+            else:
+                break
+            random_val = conversion_func(self.parameter_distributions[(signal_part, parameter_name)].get_parameter(prev_val))
+        if random_val in dissalowed_vals:
+            raise ers.RetryError(f"For {parameter_name=} parameter '{random_val}' was disallowed. Try again.")
+
+        # check whether we are inside the distribution, otherwise set borders
+        if random_val < mini:
+            self.printer(f"Chosen {random_val=} for {parameter_name=} is too low. Setting to minimum value '{mini}'.",
+                         level=2)
+            random_val = mini
+        elif random_val > maxi:
+            self.printer(
+                f"Chosen {random_val=} for {parameter_name=} is too large. Setting to maximum value '{maxi}'.",
+                level=2)
+            random_val = maxi
+        return random_val
+
+    def instantiate_signal(self, signal_parts: dict[str: str], signal_length: int,
+                           previous_signal: signals.Signal = None) -> signals.Signal:
+
+        # go through the parts, get the random parameters, choose them, and then instantiate the object
+        instantiated_signal_parts = {}
+        for signal_part, classname in signal_parts.items():
+
+            # make a print if verbose
+            self.printer(f"Creating signal part '{signal_part}' with class '{classname}'.")
+
+            # get the class object
+            class_obj = self.possible_parts[signal_part][classname]
+
+            # get the parameters we have to choose
+            possible_parameters = class_obj.get_parameters_for_randomizations()
+
+            # go through the parameters and create randomized values
+            params = {'length': signal_length}
+            for parameter_name, parameter in possible_parameters.items():
+                params[parameter_name] = self.instantiate_random_parameter(classname, parameter_name, parameter, signal_part, previous_signal)
+
+            # create the signal part
+            instantiated_signal_parts[signal_part] = class_obj(**params)
+
+        # create the signal from the signal parts
+        instantiated_signal = signals.Signal.from_dict(instantiated_signal_parts)
+        return instantiated_signal
 
     def generate_from_events(self, event_list: list[int,]) -> signals.ChangeSignal:
         pass
 
+    def printer(self, msg: str, level: int = 0):
+        if self.verbose:
+            indents = "\t"*level
+            print(f'{indents}{msg}')
+
 
 if __name__ == '__main__':
+    import matplotlib.pyplot as plt
 
     # make a change signal generator
-    csg = ChangeSignalGenerator()
-    csg.generate_initial_signal()
+    csg = ChangeSignalGenerator(verbose=True)
+    abcg = csg.generate_signal()
+    haha = csg.instantiate_signal(abcg, 200)
+    plt.plot(haha.render())
+    plt.show()
     exit()
 
     # get the subclasses
