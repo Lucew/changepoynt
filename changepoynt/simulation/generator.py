@@ -12,6 +12,7 @@ from changepoynt.simulation import noises
 from changepoynt.simulation import randomizers as rds
 from changepoynt.simulation import signals
 from changepoynt.simulation import errors as ers
+from changepoynt.simulation.signals import ChangeSignal
 
 
 class ChangeGenerator:
@@ -136,7 +137,8 @@ class ChangeGenerator:
         new_event_list = []
         for cplist, linkage in zip(original_lists, linking_weights):
             # transform the cplist into numpy array for faster processing
-            cplist = np.array(cplist)
+            # also get rid of start and end (as those are zero and self.length)
+            cplist = np.array(cplist[1:-1])
 
             # choose the values using a uniform distribution
             choose = self.random_generator.uniform(low=0.0, high=1.0, size=cplist.shape[0])
@@ -148,7 +150,7 @@ class ChangeGenerator:
             new_event_list.extend(cplist)
 
         # sort the new event list
-        new_event_list = sorted(new_event_list)
+        new_event_list = [0] + sorted(new_event_list) + [self.length]
 
         return new_event_list
 
@@ -164,7 +166,7 @@ class ChangeGenerator:
         # now divide the length by the number of events
         if sampled_event_number > max_events:
             warnings.warn(
-                f'The sampled event number ({sampled_event_number}) if larger than the allowed events. Defaulting to {max_events=}.')
+                f'The sampled event number ({sampled_event_number}) is larger than the allowed events. Defaulting to {max_events=}.')
         num_events = min(max_events, sampled_event_number)
         return num_events
 
@@ -177,7 +179,7 @@ class ChangeGenerator:
         # check whether we have enough events to get our num_lists
         if num_events < num_lists:
             raise ValueError(
-                f"We could not sample enough change points for the specified number of lists '{num_lists=}'. Either decrease 'num_lists', decrease 'samples_before_change', or increase 'rate'.")
+                f"We could not sample enough change points for the specified number of lists '{num_lists=}'. Either decrease 'num_lists', decrease '{self.samples_before_change=}', or increase '{self.rate=}'.")
 
         # generate the events point
         events = self.generate_random_points(self.length, self.minimum_length, num_events)
@@ -192,7 +194,9 @@ class ChangeGenerator:
         # get the split event lists
         event_lists = []
         for start, stop in zip(split_points, split_points[1:]):
-            event_lists.append(sorted(events[start:stop]))
+            sorted_events = sorted(events[start:stop])
+            sorted_events = [0] + sorted_events + [self.length]
+            event_lists.append(sorted_events)
         return event_lists
 
     def generate_independent_list_disturbed(self, num_lists: int, extra_lists: typing.Optional[int] = None):
@@ -208,9 +212,10 @@ class ChangeGenerator:
             raise ValueError(
                 f"We tried to generate {num_lists + extra_lists=} independent lists. Most likely these were to much. Original error below.\n\n{excp}.")
 
-        # keep the lists and fuse the extra ones
+        # keep the lists and fuse the extra ones, make sure to get rid of zeros and self.length
+        # for the disturbances (therefore only from 1 to element -1)
         independent_lists = lists[:num_lists]
-        disturbances = [ele for ls in lists[num_lists:] for ele in ls]
+        disturbances = [ele for ls in lists[num_lists:] for ele in ls[1:-1]]
         return independent_lists, disturbances
 
 
@@ -229,9 +234,9 @@ class ChangeSignalGenerator:
                  parameter_distributions: dict[tuple[str, str, str]: base.ParameterDistribution] = None,
                  transition_selectors: dict[tuple[str, str]: base.RandomSelector] = None,
                  default_transition_selector: base.RandomSelector = None,
-                 random_generator: np.random.Generator = None,
+                 random_generator: typing.Optional[typing.Union[np.random.Generator, int]] = None,
                  verbose: bool = False,
-                 retries: int = 20) -> None:
+                 retries: int = 100) -> None:
 
         # save whether we are verbose
         self.verbose = verbose
@@ -247,6 +252,8 @@ class ChangeSignalGenerator:
             self.random_generator = np.random.default_rng()
         elif isinstance(random_generator, np.random.Generator):
             self.random_generator = random_generator
+        elif isinstance(random_generator, int):
+            self.random_generator = np.random.default_rng(random_generator)
         else:
             raise TypeError("'random_state' must be either None or a np.random.Generator.")
 
@@ -255,15 +262,20 @@ class ChangeSignalGenerator:
         # get the possible classes for each signal part
         self.possible_parts = {'trend': base.SignalPart.get_registered_signal_parts_group(base.BaseTrend),
                                'noise': base.SignalPart.get_registered_signal_parts_group(base.BaseNoise),
-                               'oscillation': base.SignalPart.get_registered_signal_parts_group(base.BaseOscillation)}
+                               'oscillation': base.SignalPart.get_registered_signal_parts_group(base.BaseOscillation),
+                               'transition': base.SignalPart.get_registered_signal_parts_group(base.BaseTransition)}
 
         # create the default values for the oscillation initial selector
         if initial_oscillation_selector is None:
-            initial_oscillation_selector = rds.RandomSelector(random_generator=self.random_generator)
+            initial_oscillation_selector = rds.PreferenceRandomSelector(random_generator=self.random_generator,
+                                                                        preferred_choice='NoOscillation',
+                                                                        preferred_probability=0.8,
+                                                                        choices=list(self.possible_parts['oscillation'].keys()))
         # create the default values for the default oscillation selector
         if default_oscillation_selector is None:
-            default_oscillation_selector = rds.ConditionalContinuousSelector(keep_probability=0.75,
-                                                                             random_generator=self.random_generator)
+            default_oscillation_selector = rds.ConditionalRandomSelector(keep_probability=0.75,
+                                                                         random_generator=self.random_generator,
+                                                                         choices=list(self.possible_parts['oscillation'].keys()))
         # create the default value for the oscillation selectors
         if oscillation_selectors is None:
             oscillation_selectors = {}
@@ -274,11 +286,15 @@ class ChangeSignalGenerator:
 
         # create the default values for the trend initial selector
         if initial_trend_selector is None:
-            initial_trend_selector = rds.RandomSelector(random_generator=self.random_generator)
+            initial_trend_selector = rds.PreferenceRandomSelector(random_generator=self.random_generator,
+                                                                  preferred_choice='ConstantOffset',
+                                                                  preferred_probability=0.9,
+                                                                  choices=list(self.possible_parts['trend'].keys()))
         # create the default values for the default trend selector
         if default_trend_selector is None:
-            default_trend_selector = rds.ConditionalContinuousSelector(keep_probability=0.75,
-                                                                       random_generator=self.random_generator)
+            default_trend_selector = rds.ConditionalRandomSelector(keep_probability=0.85,
+                                                                   random_generator=self.random_generator,
+                                                                   choices=list(self.possible_parts['trend'].keys()))
         # create the default value for the oscillation selectors
         if trend_selectors is None:
             trend_selectors = {}
@@ -334,7 +350,8 @@ class ChangeSignalGenerator:
 
         # set the default selector
         if default_transition_selector is None:
-            default_transition_selector = rds.RandomSelector(random_generator=self.random_generator)
+            default_transition_selector = rds.RandomSelector(random_generator=self.random_generator,
+                                                             choices=list(self.possible_parts['transition'].keys()))
         elif isinstance(default_transition_selector, base.RandomSelector):
             default_transition_selector = default_transition_selector
         else:
@@ -396,14 +413,14 @@ class ChangeSignalGenerator:
             output_selectors[key] = selector
         return output_selectors
 
-    def generate_signal(self, previous_signal_parts: dict[str: str] = None) -> dict[str: str]:
+    def choose_signal(self, previous_signal_parts: dict[str: str] = None) -> dict[str: str]:
 
         # set the default if no previous signal has been specified
         if previous_signal_parts is None:
             previous_signal_parts = collections.defaultdict(lambda : None)
 
         # get the signal parts conditioned on the previous signal parts
-        signal_parts = {part_name: self.selectors[part_name][previous_signal_parts[part_name]].get_selection(previous_signal_parts[part_name], choices=list(self.possible_parts[part_name].keys())) for part_name in self.selectors.keys()}
+        signal_parts = {part_name: self.selectors[part_name][previous_signal_parts[part_name]].get_selection(previous_signal_parts[part_name]) for part_name in self.selectors.keys()}
         return signal_parts
 
     def instantiate_random_parameter(self, classname: str, parameter_name: str, parameter: base.Parameter,
@@ -414,48 +431,30 @@ class ChangeSignalGenerator:
         # get the previous value (with default if no previous signal is specified)
         prev_val = None
         if previous_signal is not None:
-            prev_val = previous_signal.get_randomizeable_parameter_values()[signal_part][parameter_name]
+            prev_val = previous_signal.get_randomizeable_parameter_values()[signal_part].get(parameter_name)
 
         # get the minimum value, disallowed values, and maximum value for the parameter
         mini, *dissalowed_vals, maxi = parameter.get_information()['limit']
+        dissalowed_vals = set(dissalowed_vals)
 
         # get the random value from the parameter distribution
         random_val = self.parameter_distributions[(signal_part, classname, parameter_name)].get_parameter(prev_val)
 
-        # check whether the type of the parameter works
-        allowed_types = parameter.get_information()['type']
-        if type(random_val) not in allowed_types:
-            conversion_func = allowed_types[0]
-            try:
-                random_val = conversion_func(random_val)
-            except TypeError:
-                raise TypeError(f"The distribution for '{parameter_name=} in '{signal_part=}' does return {type(random_val)} but we need one of '{allowed_types}'. Tried converting with '{allowed_types[0]}(random_value)' but did not work.")
-        else:
-            # do nothing for the conversion
-            conversion_func = lambda x: x
+        # get the parameter tolerance
+        tolerance = parameter.get_information()['tolerance']
 
         # try to create the parameter multiple times
         for retry_index in range(self.retries):
-            if random_val in dissalowed_vals:
+            if any(abs(random_val-disallowed_val) <= tolerance for disallowed_val in dissalowed_vals):
                 self.printer(
                     f"Chosen parameter {parameter_name} was disallowed: '{random_val=}'. {dissalowed_vals=}. Going again! Try: {retry_index + 1}/{self.retries}.",
                     level=2)
             else:
                 break
-            random_val = conversion_func(self.parameter_distributions[(signal_part, parameter_name)].get_parameter(prev_val))
-        if random_val in dissalowed_vals:
-            raise ers.RetryError(f"For {parameter_name=} parameter '{random_val}' was disallowed. Try again.")
+            random_val = self.parameter_distributions[(signal_part, classname, parameter_name)].get_parameter(prev_val)
+        if any(abs(random_val-disallowed_val) <= tolerance for disallowed_val in dissalowed_vals):
+            raise ers.RetryError(f"For {parameter_name=} parameter '{random_val}' was disallowed. Retries maxed out.")
 
-        # check whether we are inside the distribution, otherwise set borders
-        if random_val < mini:
-            self.printer(f"Chosen {random_val=} for {parameter_name=} is too low. Setting to minimum value '{mini}'.",
-                         level=2)
-            random_val = mini
-        elif random_val > maxi:
-            self.printer(
-                f"Chosen {random_val=} for {parameter_name=} is too large. Setting to maximum value '{maxi}'.",
-                level=2)
-            random_val = maxi
         return random_val
 
     def instantiate_signal(self, signal_parts: dict[str: str], signal_length: int,
@@ -486,8 +485,39 @@ class ChangeSignalGenerator:
         instantiated_signal = signals.Signal.from_dict(instantiated_signal_parts)
         return instantiated_signal
 
+    def generate_signal(self, length: int, previous_signal: signals.Signal = None) -> signals.Signal:
+
+        # get the dict of previous signal parts and their names
+        previous_signal_parts = None
+        if previous_signal is not None:
+            previous_signal_parts = {typename: part_object.__class__.__name__ for typename, part_object in previous_signal.get_signal_parts().items()}
+
+        # get the new signal parts
+        signal_parts = self.choose_signal(previous_signal_parts)
+
+        # instantiate the signal
+        new_signal = self.instantiate_signal(signal_parts, length, previous_signal=previous_signal)
+        return new_signal
+
     def generate_from_events(self, event_list: list[int,]) -> signals.ChangeSignal:
-        pass
+
+        print('Event List', event_list)
+
+        # go through the list of events and create the signals
+        previous_signal = None
+        signal_list = []
+        for event_start, event_end in zip(event_list, event_list[1:]):
+
+            # compute the length of the signal
+            signal_length = event_end - event_start
+
+            # generate the signal
+            previous_signal = self.generate_signal(signal_length, previous_signal=previous_signal)
+
+            # save the signal
+            signal_list.append(previous_signal)
+        print(signal_list)
+        return ChangeSignal(signal_list)
 
     def printer(self, msg: str, level: int = 0):
         if self.verbose:
@@ -498,18 +528,7 @@ class ChangeSignalGenerator:
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
 
-    # make a change signal generator
-    csg = ChangeSignalGenerator(verbose=True)
-    abcg = csg.generate_signal()
-    haha = csg.instantiate_signal(abcg, 200)
-    plt.plot(haha.render())
-    plt.show()
-    exit()
-
-    # get the subclasses
-    print(base.SignalPart.get_all_possible_transitions())
-
-    cpg = ChangeGenerator(length=10000)
+    cpg = ChangeGenerator(length=1000, minimum_length=100, rate=1/5)
     _pts = cpg.generate_random_points(maximum_value=100, minimum_distance=10)
     print(_pts)
 
@@ -532,3 +551,14 @@ if __name__ == '__main__':
         print(_id)
     print('Printing disturbances:', _dist)
     print()
+
+    # make a change signal generator
+    csg = ChangeSignalGenerator(verbose=False)
+    haha = csg.generate_signal(200)
+    plt.plot(haha.render())
+
+    # create a change signal from the event list
+    plt.figure()
+    chnggg = csg.generate_from_events(_indep[0])
+    plt.plot(chnggg.render())
+    plt.show()

@@ -5,15 +5,15 @@ import changepoynt.simulation.randomizers as rds
 
 
 class ConstantOffset(base.BaseTrend):
-    offset = base.Parameter((float, int), limit=(-np.inf, np.inf), tolerance=0.1, default_parameter_distribution=rds.ContinuousConditionalGaussianDistribution(40))
+    offset = base.Parameter((float, int), limit=(-np.inf, np.inf), tolerance=0.1, default_parameter_distribution=rds.ContinuousConditionalGaussianDistribution(4))
 
     def render(self) -> np.ndarray:
         return np.ones((self.length,))*self.offset
 
 
 class LinearTrend(base.BaseTrend):
-    offset = base.Parameter((float, int), limit=(-np.inf, np.inf), tolerance=0.1, default_parameter_distribution=rds.ContinuousConditionalGaussianDistribution(40))
-    slope = base.Parameter((float, int), limit=(-np.inf, 0, np.inf), tolerance=0.1, default_parameter_distribution=rds.ContinuousConditionalGaussianDistribution(2))
+    offset = base.Parameter((float, int), limit=(-np.inf, np.inf), tolerance=0.01, default_parameter_distribution=rds.ContinuousConditionalGaussianDistribution(1))
+    slope = base.Parameter((float, int), limit=(-np.inf, 0, np.inf), tolerance=0.01, default_parameter_distribution=rds.ContinuousConditionalGaussianDistribution(.03, default_mean=0.04))
     attachment_point = base.Parameter((float, int), limit=(-np.inf, np.inf), tolerance=0.1, modifiable=False, derived=True, use_random=False)
 
     def compute_attachment_point(self):

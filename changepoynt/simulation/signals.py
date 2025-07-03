@@ -64,6 +64,9 @@ class Signal:
     def render(self) -> np.ndarray:
         return self.parts_to_signal(self.render_parts())
 
+    def get_signal_parts(self):
+        return {'oscillation': self.oscillation, 'trend': self.trend, 'noise': self.noise}
+
     @property
     def shape(self) -> tuple[int,]:
         # we have tested noise and signal to be the same shape when constructing this class

@@ -17,8 +17,8 @@ class NoOscillation(base.BaseOscillation):
 
 
 class Periodic(base.BaseOscillation):
-    periods = base.Parameter(int, limit=(1, 100), tolerance=0.5, use_for_comparison=False, default_parameter_distribution=rds.DiscretePoissonDistribution(3, 1, 100))
-    amplitude = base.Parameter((float, int), limit=(-np.inf, np.inf), tolerance=0.1, default_value=1.0, default_parameter_distribution=rds.ContinuousConditionalGaussianDistribution(standard_deviation=7, default_mean=1.0))
+    periods = base.Parameter(int, limit=(1, 100), tolerance=0.5, use_for_comparison=False, default_parameter_distribution=rds.DiscretePoissonDistribution(20, 1, 100))
+    amplitude = base.Parameter((float, int), limit=(-np.inf, np.inf), tolerance=0.1, default_value=1.0, default_parameter_distribution=rds.ContinuousConditionalGaussianDistribution(standard_deviation=2, default_mean=0.5))
     wavelength = base.Parameter(float, limit=(5.0, np.inf), derived=True, tolerance=0.1, modifiable=False, use_random=False, limit_error_explanation="We require at least 5 samples per period. Either specify less periods or greater length.")
 
     def compute_wavelength(self):

@@ -159,41 +159,67 @@ class NoDistribution(base.ParameterDistribution):
         return self.value
 
 
-class ConditionalContinuousSelector(base.RandomSelector):
+class ConditionalRandomSelector(base.RandomSelector):
     """
     This class models a conditional selector of discrete values. The user can specify one probability which is the
     probability that the choice stays the same as before. The leftover probability is uniformly distributed among all
     other choices.
     """
-    def __init__(self, keep_probability: float, random_generator: typing.Optional[np.random.Generator] = None):
-
+    def __init__(self, choices: list[str], keep_probability: float,
+                 random_generator: typing.Optional[np.random.Generator] = None):
+        super().__init__(choices, random_generator)
         # check and keep the probability
         if not (0.0 <= keep_probability <= 1.0):
             raise ValueError(f"'{keep_probability=}' must be between 0.0 and 1.0.")
         self.keep_probability = keep_probability
 
-        # save the random generator
-        self.random_generator = random_generator
-
-        # make the default random state
-        if self.random_generator is None:
-            self.random_generator = np.random.default_rng()
-
-    def get_selection(self, previous_value: str, choices: list[str]) -> str:
+    def get_selection(self, previous_value: str) -> str:
 
         # check that the previous value is in the choices
-        if previous_value not in choices:
-            raise ValueError(f"'{previous_value=}' is not in '{choices=}'.")
+        if previous_value not in self.choices:
+            raise ValueError(f"'{previous_value=}' is not in '{self.choices=}'.")
 
-        probabilities = [0]*len(choices)
-        other_prob = (1-self.keep_probability)/(len(choices)-1)
-        for idx, choice in enumerate(choices):
+        probabilities = [0]*len(self.choices)
+        other_prob = (1-self.keep_probability)/(len(self.choices)-1)
+        for idx, choice in enumerate(self.choices):
             if choice != previous_value:
                 probabilities[idx] = other_prob
             else:
                 probabilities[idx] = self.keep_probability
 
-        return self.random_generator.choice(choices, p=probabilities)
+        return self.random_generator.choice(self.choices, p=probabilities)
+
+
+class PreferenceRandomSelector(base.RandomSelector):
+    """
+    This class models a conditional selector of discrete values. The user can specify a preferred choice and the
+    corresponding probability.
+    """
+    def __init__(self, choices: list[str], preferred_choice: str, preferred_probability: float,
+                 random_generator: typing.Optional[np.random.Generator] = None):
+        super().__init__(choices, random_generator)
+
+        # check that the preferred choice is a possible choice
+        if preferred_choice not in self.choices:
+            raise ValueError(f"'{preferred_choice=}' is not in '{self.choices=}'.")
+        self.preferred_choice = preferred_choice
+
+        # check and keep the probability
+        if not (0.0 <= preferred_probability <= 1.0):
+            raise ValueError(f"'{preferred_probability=}' must be between 0.0 and 1.0.")
+        self.preferred_probability = preferred_probability
+
+    def get_selection(self, previous_value: str) -> str:
+
+        probabilities = [0]*len(self.choices)
+        other_prob = (1-self.preferred_probability)/(len(self.choices)-1)
+        for idx, choice in enumerate(self.choices):
+            if choice != self.preferred_choice:
+                probabilities[idx] = other_prob
+            else:
+                probabilities[idx] = self.preferred_probability
+
+        return self.random_generator.choice(self.choices, p=probabilities)
 
 
 class RandomSelector(base.RandomSelector):
@@ -201,8 +227,10 @@ class RandomSelector(base.RandomSelector):
     This class models a conditional selector of discrete values. It chooses randomly using a specified probability
     distribution (array of values). If no distribution is given, it will use a uniform distribution.
     """
-    def __init__(self, probabilities: list[float] = None,
+    def __init__(self, choices: list[str], probabilities: list[float] = None,
                  random_generator: typing.Optional[np.random.Generator] = None):
+        # initialize the super class
+        super().__init__(choices, random_generator)
 
         # check the list of probabilities
         if probabilities is not None:
@@ -212,28 +240,23 @@ class RandomSelector(base.RandomSelector):
                 raise ValueError(f"Every element of 'probabilities' must be greater than 0.")
         self.probabilities = probabilities
 
-        # save the random generator
-        self.random_generator = random_generator
+        # check the length of the probabilities
+        if self.probabilities is not None and len(self.choices) != self.probabilities:
+            raise ValueError(f"'{len(self.probabilities)=}' must be equal to {len(choices)=}.")
 
-        # make the default random state
-        if self.random_generator is None:
-            self.random_generator = np.random.default_rng()
+    def get_selection(self, previous_value: str) -> str:
 
-    def get_selection(self, previous_value: str, choices: list[str]) -> str:
-
-        # check that the choices have the same shape as the probabilities
+        # use the probabilities if we have them
         if self.probabilities is None:
-            return self.random_generator.choice(choices)
-        else:
-            if len(choices) != self.probabilities:
-                raise ValueError(f"'{len(self.probabilities)=}' must be equal to {len(choices)=}.")
-            return self.random_generator.choice(choices, p=self.probabilities)
+            return self.random_generator.choice(self.choices)
+        return self.random_generator.choice(self.choices, p=self.probabilities)
 
 
 class StaticSelector(base.RandomSelector):
 
     def __init__(self, output: str):
+        super().__init__([], None)
         self.output = output
 
-    def get_selection(self, previous_value: str, choices: list[str]) -> str:
+    def get_selection(self, previous_value: str) -> str:
         return self.output

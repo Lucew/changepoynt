@@ -71,12 +71,34 @@ class ParameterDistribution:
 
 class RandomSelector:
 
-    @abc.abstractmethod
-    def __init__(self, *args, **kwargs):
-        raise NotImplementedError
+    def __init__(self, choices: list[str], random_generator: typing.Optional[np.random.Generator] = None):
+
+        # get the signal parts that we allow
+        registered_signal_parts = set(SignalPart.get_registered_signal_parts().keys())
+
+        # check the type
+        if not isinstance(choices, list):
+            raise TypeError(f"{choices=} is not a list.")
+        if not all(isinstance(ele, str) for ele in choices):
+            raise TypeError(f"Not all elements in {choices=} are a string.")
+
+        # check the choices
+        if all(choice in registered_signal_parts for choice in choices):
+            self.choices = choices
+        else:
+            raise ValueError(f"Not all elements of {choices=} are registered signal parts: {registered_signal_parts=}.")
+
+        # save the random generator
+        self.random_generator = random_generator
+
+        # make the default random state
+        if self.random_generator is None:
+            self.random_generator = np.random.default_rng()
+        elif not isinstance(self.random_generator, np.random.Generator):
+            raise TypeError(f"{self.random_generator=} must be an instance of np.random.Generator")
 
     @abc.abstractmethod
-    def get_selection(self, prev_signal_part: str, choices: list[str]) -> str:
+    def get_selection(self, prev_signal_part: str) -> str:
         raise NotImplementedError
 
 
@@ -532,7 +554,7 @@ class SignalPart(metaclass=SignalPartMeta):
         return {name: getattr(self, name) for name in self.get_parameters_for_randomizations().keys()}
 
     @classmethod
-    def get_all_registered_parameters_for_randomization(cls):
+    def get_all_registered_parameters_for_randomization(cls) -> dict[tuple[str, str, str]: Parameter]:
         return {(parttype, clsname, paramname): parameter
                 for parttype, typeclasses in cls.get_registered_signal_parts_grouped().items()
                 for clsname, clsinstance in typeclasses.items()
@@ -632,7 +654,7 @@ class BaseTransition(SignalPart):
             raise TypeError(f"Length must be either 'float' or 'int'. Currently: '{type(transition_length)}'.")
 
         # check that to and from object are different
-        if from_object == to_object:
+        if id(from_object) == id(to_object):
             raise ValueError(f"From object and to object cannot be equal for a transition.")
 
         # check whether both from and to belong to the same signal part type (trend, oscillation, noise)
