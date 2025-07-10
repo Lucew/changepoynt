@@ -154,6 +154,8 @@ not want to be in the way!
 
 # Known Issues <a id="known-issues"></a>
 
+### Division by Zero for SST with IKA
+
 Some of the methods like SST (with method='ika') and (R)uLSIF have issues when running for trivial sections of time
 series. This includes steady series (e.g., only zero values, just lines with some slope). Intuitively, these methods aim
 to extract multiple characteristics in these sections but there are none, so they run into issues. Errors you will
@@ -163,6 +165,10 @@ complicated and I have not yet found a good way to circumvent these errors.
 Fortunately, there is an easy workaround. Just add a small white noise to your signal, e.g. by adding 
 `signal += np.random.normal(0, 1e-4, size=signal.shape[0])`. With noise much smaller than you signal you will not
 introduce large additional change points and the methods will not fail.
+
+### Python 3.13 no supported for all methods
+We are aware that some dependencies currently are not supporting Python 3.13 and higher.
+These packages are mostly used for the fast_hankel option. We are currently discussing whether to make them optional.
 
 # Outlook <a id="outlook"></a>
 
