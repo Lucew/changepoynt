@@ -60,10 +60,34 @@ class LinearTrendTransition(base.BaseTransition):
         return prev_combined*(1-sigmoid) + future_combined*sigmoid
 
 
+class OscillationRampTransition(base.BaseTransition):
+    allowed_from = (oscillations.NoOscillation,)
+    allowed_to = (oscillations.Periodic,)
+
+    def get_transition_values(self) -> np.ndarray:
+
+        # make sigmoid function
+        z = np.linspace(-2, 5, self.transition_length)
+        sigmoid = (1 / (1 + np.exp(-z)))
+
+        # multiply the second part with the sigmoid (which has an amplitude)
+        future_part = self.end_y * sigmoid
+        return np.concatenate((self.start_y, future_part))
+
+
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
 
+    # make transitions between no oscillation and oscillation
+    osci1 = oscillations.NoOscillation(1000)
+    osci2 = oscillations.SineOscillation(1000, periods=15)
+    transition1 = OscillationRampTransition(200, osci1, osci2)
+    array = np.concatenate(transition1.apply(osci1.render(), osci2.render()))
+    plt.plot(array)
+    plt.show()
+
     # make transition between constant trends
+    plt.figure()
     trend1 = trends.ConstantOffset(length=200, offset=12)
     trend2 = trends.ConstantOffset(length=200, offset=5)
     transition1 = ConstantTrendTransition(transition_length=40, from_object=trend1, to_object=trend2)

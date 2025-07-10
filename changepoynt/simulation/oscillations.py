@@ -69,7 +69,7 @@ class DirichletOscillation(Periodic):
 
 
 class SquareOscillation(Periodic):
-    duty = base.Parameter((float, int), limit=(0, 1), tolerance=0.05, default_value=0.5, default_parameter_distribution=rds.ContinuousUniformDistribution(0.0, 1.0))
+    duty = base.Parameter((float, int), limit=(0, 1), tolerance=0.05, default_value=0.5, default_parameter_distribution=rds.ContinuousGaussianDistribution(0.1, 0.5, 0.0, 1.0))
     wavelength = base.Parameter(float, limit=(2, np.inf), derived=True, tolerance=0.1, modifiable=False, use_random=False, limit_error_explanation="We require at least 2 samples per period. Either specify less periods or greater length.")
 
     def render(self) -> np.ndarray:

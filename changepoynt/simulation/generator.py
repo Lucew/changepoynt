@@ -1,6 +1,7 @@
 import collections
 import typing
 import warnings
+from inspect import isclass
 
 import numpy as np
 
@@ -9,6 +10,7 @@ from changepoynt.simulation import base
 from changepoynt.simulation import oscillations
 from changepoynt.simulation import trends
 from changepoynt.simulation import noises
+from changepoynt.simulation import transitions
 from changepoynt.simulation import randomizers as rds
 from changepoynt.simulation import signals
 from changepoynt.simulation import errors as ers
@@ -222,6 +224,9 @@ class ChangeGenerator:
 class ChangeSignalGenerator:
 
     def __init__(self,
+                 trend_change_probability: float = 0.5,
+                 oscillation_change_probability: float = 0.5,
+                 noise_change_probability: float = 0.5,
                  oscillation_selectors: dict[str: base.RandomSelector] = None,
                  initial_oscillation_selector: base.RandomSelector = None,
                  default_oscillation_selector: base.RandomSelector = None,
@@ -232,8 +237,10 @@ class ChangeSignalGenerator:
                  initial_noise_selector: base.RandomSelector = None,
                  default_noise_selector: base.RandomSelector = None,
                  parameter_distributions: dict[tuple[str, str, str]: base.ParameterDistribution] = None,
-                 transition_selectors: dict[tuple[str, str]: base.RandomSelector] = None,
-                 default_transition_selector: base.RandomSelector = None,
+                 oscillation_transition_selectors: dict[tuple[str, str]: base.RandomSelector] = None,
+                 oscillation_length_distribution: base.ParameterDistribution = None,
+                 trend_transition_selectors: dict[tuple[str, str]: base.RandomSelector] = None,
+                 trend_length_distribution: base.ParameterDistribution = None,
                  random_generator: typing.Optional[typing.Union[np.random.Generator, int]] = None,
                  verbose: bool = False,
                  retries: int = 100) -> None:
@@ -245,6 +252,11 @@ class ChangeSignalGenerator:
         # check the retries so it is correct
         if not isinstance(self.retries, int) or self.retries <= 0:
             raise TypeError(f"'{retries=}' must be a positive integer.")
+
+        # save the change probabilities
+        self.trend_change_probability = trend_change_probability
+        self.oscillation_change_probability = oscillation_change_probability
+        self.noise_change_probability = noise_change_probability
 
         # initialize general variables ---------------------------------------------------------------------------------
         # save the random state
@@ -269,11 +281,11 @@ class ChangeSignalGenerator:
         if initial_oscillation_selector is None:
             initial_oscillation_selector = rds.PreferenceRandomSelector(random_generator=self.random_generator,
                                                                         preferred_choice='NoOscillation',
-                                                                        preferred_probability=0.8,
+                                                                        preferred_probability=0.95,
                                                                         choices=list(self.possible_parts['oscillation'].keys()))
         # create the default values for the default oscillation selector
         if default_oscillation_selector is None:
-            default_oscillation_selector = rds.ConditionalRandomSelector(keep_probability=0.75,
+            default_oscillation_selector = rds.ConditionalRandomSelector(keep_probability=0.95,
                                                                          random_generator=self.random_generator,
                                                                          choices=list(self.possible_parts['oscillation'].keys()))
         # create the default value for the oscillation selectors
@@ -288,13 +300,17 @@ class ChangeSignalGenerator:
         if initial_trend_selector is None:
             initial_trend_selector = rds.PreferenceRandomSelector(random_generator=self.random_generator,
                                                                   preferred_choice='ConstantOffset',
-                                                                  preferred_probability=0.9,
+                                                                  preferred_probability=0.95,
                                                                   choices=list(self.possible_parts['trend'].keys()))
         # create the default values for the default trend selector
         if default_trend_selector is None:
-            default_trend_selector = rds.ConditionalRandomSelector(keep_probability=0.85,
+            default_trend_selector = rds.ConditionalRandomSelector(keep_probability=0.95,
                                                                    random_generator=self.random_generator,
                                                                    choices=list(self.possible_parts['trend'].keys()))
+            default_trend_selector = rds.PreferenceRandomSelector(random_generator=self.random_generator,
+                                                                  preferred_choice='ConstantOffset',
+                                                                  preferred_probability=0.85,
+                                                                  choices=list(self.possible_parts['trend'].keys()))
         # create the default value for the oscillation selectors
         if trend_selectors is None:
             trend_selectors = {}
@@ -348,34 +364,75 @@ class ChangeSignalGenerator:
         
         # initialize random transition selection -----------------------------------------------------------------------
 
-        # set the default selector
-        if default_transition_selector is None:
-            default_transition_selector = rds.RandomSelector(random_generator=self.random_generator,
-                                                             choices=list(self.possible_parts['transition'].keys()))
-        elif isinstance(default_transition_selector, base.RandomSelector):
-            default_transition_selector = default_transition_selector
-        else:
-            raise TypeError("'default_transition_selector' must be either None or a RandomSelector.")
-
         # get all the transitions that are registered
         self.possible_transitions = base.SignalPart.get_all_possible_transitions()
 
-        # save the default parameter distribution
-        self.transition_selectors = collections.defaultdict(lambda: default_transition_selector)
-
         # create the default transition_selectors
-        if transition_selectors is None:
-            transition_selectors = {}
+        if oscillation_transition_selectors is None:
+            oscillation_transition_selectors = dict()
+        if trend_transition_selectors is None:
+            trend_transition_selectors = dict()
+
+        # create the default values for the oscillation transition selectors
+        oscillation_transition_selectors = {sigsig: rds.PreferenceRandomSelector(random_generator=self.random_generator,
+                                                                                 preferred_choice='NoTransition',
+                                                                                 preferred_probability=0.3,
+                                                                                 choices=list(transis.keys()))
+                                            for sigsig, transis in self.possible_transitions['oscillation'].items()}
+        # create the default values for the trend transition selectors
+        trend_transition_selectors = {sigsig: rds.PreferenceRandomSelector(random_generator=self.random_generator,
+                                                                           preferred_choice='NoTransition',
+                                                                           preferred_probability=0.25,
+                                                                           choices=list(transis.keys()))
+                                      for sigsig, transis in self.possible_transitions['trend'].items()}
+        self.transition_selectors = {'oscillation': oscillation_transition_selectors,
+                                     'trend': trend_transition_selectors}
 
         # overwrite the specified selectors
-        for key, selector in transition_selectors.items():
+        for part_type, transition_selectors in (('oscillation', oscillation_transition_selectors), ('trend', trend_transition_selectors)):
+            for key, selector in transition_selectors.items():
 
-            # the key has to be existing
-            if key not in self.possible_transitions:
-                raise KeyError(f"{key=} in 'transition_selectors' seems to specify an invalid transition.")
+                # the key has to be existing
+                if key not in self.possible_transitions[part_type]:
+                    raise KeyError(f"{key=} in 'transition_selectors' seems to specify an invalid transition.")
 
-            # update the dictionary
-            self.transition_selectors[key] = selector
+                # check that we really got a selector
+                if not isinstance(selector, base.RandomSelector):
+                    raise TypeError(f"All values of dict 'transition_selectors' have to be of type 'RandomSelector'. For {key=} type is {type(selector)}.")
+
+                # check that the choices are indeed possible transitions for this pair
+                if not all(choice in self.possible_transitions[part_type][key] for choice in selector.choices):
+                    raise ValueError(f"The choices for {part_type} transition {key=} are not valid transitions for these classes.")
+
+                # update the dictionary
+                self.transition_selectors[part_type][key] = selector
+
+        # create the default transition length distributions
+        self.transition_length_distributions = dict()
+
+        # check the transition length selectors so transitions do not get too long
+        for part_type, length_distro in (('oscillation', oscillation_length_distribution), ('trend', trend_length_distribution)):
+
+            if length_distro is None:
+                if part_type == 'oscillation':
+                    length_distro = rds.ContinuousPositiveGaussianDistribution(20.0, mean_point=5.0, maximum=50)
+                elif part_type == 'trend':
+                    length_distro = rds.ContinuousPositiveGaussianDistribution(10.0, mean_point=3.0, maximum=50)
+
+            # check the type of the distribution
+            if not isinstance(length_distro, base.ParameterDistribution):
+                raise TypeError(f"'{part_type}_length_distribution' has to be of type 'ParameterDistribution'. Currently: {type(length_distro)}.")
+
+            # check the minimum and maximum as the transition length must be greater than zero and smaller than half the
+            # minimum signal length
+            if length_distro.minimum < 1.0:
+                raise ValueError(f"'{part_type}_length_distribution' minimum value has to be greater than or equal to 1.0. Currently: {length_distro.minimum}.")
+            if length_distro.maximum > 50.0:
+                raise ValueError(f"'{part_type}_length_distribution' maximum value has to be smaller than 50 (as we can maximally transition up to 50% of the signal). Currently: {length_distro.maximum} > 50.")
+
+            # save the distribution
+            self.transition_length_distributions[part_type] = length_distro
+
 
     def handle_signal_part_selectors(self,
                                      selectors: dict[str: base.RandomSelector],
@@ -431,7 +488,12 @@ class ChangeSignalGenerator:
         # get the previous value (with default if no previous signal is specified)
         prev_val = None
         if previous_signal is not None:
+
+            # try to get the previous value of the signal if it is the same name
+            # print(parameter_name)
+            # print(previous_signal)
             prev_val = previous_signal.get_randomizeable_parameter_values()[signal_part].get(parameter_name)
+            # print()
 
         # get the minimum value, disallowed values, and maximum value for the parameter
         mini, *dissalowed_vals, maxi = parameter.get_information()['limit']
@@ -454,7 +516,6 @@ class ChangeSignalGenerator:
             random_val = self.parameter_distributions[(signal_part, classname, parameter_name)].get_parameter(prev_val)
         if any(abs(random_val-disallowed_val) <= tolerance for disallowed_val in dissalowed_vals):
             raise ers.RetryError(f"For {parameter_name=} parameter '{random_val}' was disallowed. Retries maxed out.")
-
         return random_val
 
     def instantiate_signal(self, signal_parts: dict[str: str], signal_length: int,
@@ -499,25 +560,100 @@ class ChangeSignalGenerator:
         new_signal = self.instantiate_signal(signal_parts, length, previous_signal=previous_signal)
         return new_signal
 
+    def choose_transition(self, prev_signal: signals.Signal, fut_signal: signals.Signal) -> tuple[str, str]:
+
+        # get the signal parts
+        prev_signal_parts = prev_signal.get_signal_parts()
+        fut_signal_parts = fut_signal.get_signal_parts()
+
+        # get the names of the oscillations
+        prev_oscillation = prev_signal_parts['oscillation'].__class__.__name__
+        fut_oscillation = fut_signal_parts['oscillation'].__class__.__name__
+
+        # choose oscillation transition
+        oscillation_transition = self.transition_selectors['oscillation'][(prev_oscillation, fut_oscillation)].get_selection("")
+
+        # get the name of the trends
+        prev_trend = prev_signal_parts['trend'].__class__.__name__
+        fut_trend = fut_signal_parts['trend'].__class__.__name__
+
+        # choose trend transition
+        trend_transition = self.transition_selectors['trend'][(prev_trend, fut_trend)].get_selection("")
+        return trend_transition, oscillation_transition
+
+    def instantiate_transition(self, prev_signal: signals.Signal, fut_signal: signals.Signal,
+                               oscillation_transition_name: str,
+                               trend_transition_name: str) -> tuple[base.BaseTransition, base.BaseTransition]:
+
+        # get the signal parts
+        prev_signal_parts = prev_signal.get_signal_parts()
+        fut_signal_parts = fut_signal.get_signal_parts()
+
+        # instantiate the new transitions
+        output_transitions = {'trend': transitions.NoTransition(prev_signal_parts['trend'], fut_signal_parts['trend']),
+                              'oscillation': transitions.NoTransition(prev_signal_parts['oscillation'], fut_signal_parts['oscillation'])}
+        for part_name, transition_name in (('trend', trend_transition_name), ("oscillation", oscillation_transition_name)):
+
+            # get the name of the signal parts
+            prev = prev_signal_parts[part_name].__class__.__name__
+            fut = fut_signal_parts[part_name].__class__.__name__
+
+            # get the corresponding class object
+            transition_class = self.possible_transitions[part_name][(prev, fut)][transition_name]
+
+            # instantiate the class randomly
+            curtrans = transition_class(transition_length=self.transition_length_distributions[part_name].get_parameter(0.0)/100, from_object=prev_signal_parts[part_name], to_object=fut_signal_parts[part_name])
+
+            # instantiate the transition class
+            if transition_class == transitions.OscillationRampTransition:
+                print(transition_class, part_name)
+                print(curtrans)
+                print(prev_signal_parts[part_name])
+                print(fut_signal_parts[part_name])
+            output_transitions[part_name] = curtrans
+        return output_transitions['trend'], output_transitions['oscillation']
+
+    def generate_transitions(self, prev_signal: signals.Signal, fut_signal: signals.Signal):
+
+        # check whether there is a previous signal (not at the beginning)
+        if prev_signal is None:
+            raise AttributeError(f"The previous signal was None.")
+
+        trend_transition_name, oscillation_transition_name = self.choose_transition(prev_signal, fut_signal)
+        trend_transition, oscillation_transition = self.instantiate_transition(prev_signal, fut_signal,
+                                                                               oscillation_transition_name,
+                                                                               trend_transition_name)
+        return trend_transition, oscillation_transition
+
     def generate_from_events(self, event_list: list[int,]) -> signals.ChangeSignal:
 
-        print('Event List', event_list)
+        # print('Event List', event_list)
 
         # go through the list of events and create the signals
         previous_signal = None
         signal_list = []
+        trend_transition_list = []
+        oscillation_transition_list = []
         for event_start, event_end in zip(event_list, event_list[1:]):
 
             # compute the length of the signal
             signal_length = event_end - event_start
 
             # generate the signal
-            previous_signal = self.generate_signal(signal_length, previous_signal=previous_signal)
+            next_signal = self.generate_signal(signal_length, previous_signal=previous_signal)
+
+            # get the transition for this signal pair and save them
+            if previous_signal is not None:
+                trend_transition, oscillation_transition = self.generate_transitions(previous_signal, next_signal)
+                trend_transition_list.append(trend_transition)
+                oscillation_transition_list.append(oscillation_transition)
 
             # save the signal
-            signal_list.append(previous_signal)
-        print(signal_list)
-        return ChangeSignal(signal_list)
+            signal_list.append(next_signal)
+            previous_signal = next_signal
+        # print(signal_list)
+        print(oscillation_transition_list)
+        return ChangeSignal(signal_list, oscillation_transition_list, trend_transition_list)
 
     def printer(self, msg: str, level: int = 0):
         if self.verbose:
@@ -528,7 +664,7 @@ class ChangeSignalGenerator:
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
 
-    cpg = ChangeGenerator(length=1000, minimum_length=100, rate=1/5)
+    cpg = ChangeGenerator(length=10000, minimum_length=200, rate=1/4)
     _pts = cpg.generate_random_points(maximum_value=100, minimum_distance=10)
     print(_pts)
 
@@ -555,10 +691,20 @@ if __name__ == '__main__':
     # make a change signal generator
     csg = ChangeSignalGenerator(verbose=False)
     haha = csg.generate_signal(200)
-    plt.plot(haha.render())
+    # plt.plot(haha.render())
+
+    # create a dependent list
+    dep1 = cpg.generate_dependent_list(_indep, [0.9, 0.0, 0.1, 0.0])
 
     # create a change signal from the event list
     plt.figure()
-    chnggg = csg.generate_from_events(_indep[0])
-    plt.plot(chnggg.render())
+    channel1 = csg.generate_from_events(_indep[0])
+    channel2 = csg.generate_from_events(_indep[1])
+    channel3 = csg.generate_from_events(_indep[2])
+    deplcha1 = csg.generate_from_events(dep1)
+    plt.plot(channel1.render(), label='Indep. 0')
+    plt.plot(channel2.render(), label='Indep. 1')
+    plt.plot(channel3.render(), label='Indep. 2')
+    plt.plot(deplcha1.render(), label='Dep. 0')
+    plt.legend()
     plt.show()

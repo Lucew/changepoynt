@@ -3,6 +3,7 @@ import abc
 import inspect
 import functools
 import sys
+import collections
 
 import numpy as np
 
@@ -176,6 +177,7 @@ class Parameter:
         self.doc = doc
 
         # check the parameter distribution (only if it is a random parameter)
+        self.default_parameter_distribution = None
         if self.use_random:
 
             # check whether there is one
@@ -252,6 +254,9 @@ class Parameter:
         # otherwise it will be set globally for all instances of this class
         instance._values[self.name] = value
 
+    def __str__(self):
+        return f"{self.__class__.__name__} {self.name}({self.param_type=}, {self.default_value=}, {self.limit=}, {self.tolerance=}, {self.derived=}, {self.modifiable=}, {self.use_for_comparison=}, {self.use_random}, {self.default_parameter_distribution=})"
+
 
 class SignalPartMeta(type):
 
@@ -326,6 +331,41 @@ class SignalPartMeta(type):
             return_type = return_type['return']
             if return_type != np.ndarray:
                 raise TypeError(f"The render function of class {name} has to return np.ndarray. Currently the type hint says: {return_type}.")
+
+        # check whether there are any methods for acquiring a final parameter that start with _final_
+        # if that is, it has to return a value of the same type as the parameter allowed types
+        for finalfunc in dir(new_cls):
+
+            # find the parts of the new class that have a certain naming scheme
+            if finalfunc.startswith('_final_'):
+
+                # get the actual object
+                finalobj = getattr(new_cls, finalfunc)
+
+                # check that it is indeed a function
+                if not callable(finalobj):
+                    raise TypeError(f"All properties of class {name} that start with '_final_' are reserved for functions that compute final parameter values. Currently it is not a callable, but {type(finalobj)}.")
+
+                # check that it returns the correct type
+                return_type = typing.get_type_hints(finalobj)
+                if 'return' not in return_type:
+                    raise NotImplementedError(f"The render function of class {name} is missing a return type annotation.")
+
+                # get the name of the parameter it returns
+                param_name = finalfunc.replace('_final_', '')
+
+                # check whether the paramater exists
+                if param_name not in parameters:
+                    raise NotImplementedError(f"The function {finalfunc} of class {name} aims to compute {param_name=}, but this parameter does not exist.")
+
+                # get the parameter itself
+                curparam = parameters[param_name]
+
+                # check that the returned type is correct
+                return_type = return_type['return']
+                if return_type not in curparam.param_type:
+                    raise TypeError(f"The render function of class {name} has to return np.ndarray. Currently the type hint says: {return_type}.")
+
 
         # put the class into the registry
         if has_render and SignalPart not in bases:
@@ -472,7 +512,7 @@ class SignalPart(metaclass=SignalPartMeta):
         signal_parts = cls.get_registered_signal_parts_grouped()
 
         # iterate over all possible classes
-        possible_transitions = {}
+        possible_transitions = collections.defaultdict(dict)
         for clsname1, cls1 in ((clsname, class1) for clses in signal_parts.values() for clsname, class1 in
                                clses.items()):
             # skip transitions
@@ -486,16 +526,21 @@ class SignalPart(metaclass=SignalPartMeta):
                     continue
 
                 # check whether both from and to belong to the same signal part type (trend, oscillation, noise)
-                if not any(issubclass(cls1, target_class) and issubclass(cls2, target_class) for target_class in cls.get_immediate_subclasses()):
+                found_target_class = None
+                for target_class in cls.get_immediate_subclasses():
+                    if issubclass(cls1, target_class) and issubclass(cls2, target_class):
+                        found_target_class = target_class.type_name
+                if found_target_class is None:
                     continue
 
                 # get the possible transitions
-                possible_transitions[(clsname1, clsname2)] = cls.get_possible_transitions(cls1, cls2)
+                possible_transitions[found_target_class][(clsname1, clsname2)] = cls.get_possible_transitions(cls1, cls2)
 
                 # check whether something is off
-                if len(possible_transitions[(clsname1, clsname2)]) == 0:
-                    raise NotImplementedError(f'There is no possible transition between {cls1} and {cls2}.')
-        return possible_transitions
+                if len(possible_transitions[found_target_class][(clsname1, clsname2)]) == 0:
+                    raise NotImplementedError(f'There is no possible transition between {cls1} and {cls2}, both of type {found_target_class}.')
+        # create dict from the default dict
+        return dict(possible_transitions)
 
     @property
     def shape(self) -> tuple[int,]:
@@ -551,7 +596,11 @@ class SignalPart(metaclass=SignalPartMeta):
         return {name: param for name, param in cls._parameters.items() if param.use_random}
 
     def get_parameters_for_randomizations_values(self):
-        return {name: getattr(self, name) for name in self.get_parameters_for_randomizations().keys()}
+
+        # decide which function to use (either use a calculated value or the parameter value)
+        # print(self.__class__.__name__)
+        return {name: getattr(self, name) if not hasattr(self, f'_final_{name}') else getattr(self, f'_final_{name}')()
+                for name in self.get_parameters_for_randomizations().keys()}
 
     @classmethod
     def get_all_registered_parameters_for_randomization(cls) -> dict[tuple[str, str, str]: Parameter]:
@@ -563,6 +612,12 @@ class SignalPart(metaclass=SignalPartMeta):
     @classmethod
     def get_minimum_length(cls):
         return cls._minimum_length
+
+    def __str__(self):
+        return_str = [f"Class {self.__class__.__name__} of type {self.type_name} with parameters:"]
+        for paramname, parameter in self.get_parameters().items():
+            return_str.append(f"\t{paramname} = {getattr(self,paramname)}")
+        return "\n".join(return_str)
 
 
 class BaseOscillation(SignalPart):
@@ -638,8 +693,8 @@ class BaseTransition(SignalPart):
         # check whether the from and to object are allowed
         if not any(isinstance(from_object, allowed_from) for allowed_from in self.allowed_from):
             raise TypeRestrictedError(f"'from_object' must be one of types {self.allowed_from}.")
-        if not any(isinstance(from_object, allowed_to) for allowed_to in self.allowed_to):
-            raise TypeRestrictedError(f"'from_object' must be one of types {self.allowed_to}.")
+        if not any(isinstance(to_object, allowed_to) for allowed_to in self.allowed_to):
+            raise TypeRestrictedError(f"'to_object' must be one of types {self.allowed_to}.")
 
         # check that the length is at least one
         if isinstance(transition_length, int):
@@ -650,6 +705,8 @@ class BaseTransition(SignalPart):
             if not 0 < transition_length < 0.5:
                 raise ValueError(f"In case of a 'float' type 'length' must be in interval (0, 0.5) exclusively. Currently: '{transition_length}'.")
             self.transition_length = int(min(from_object.shape[0], to_object.shape[0])*transition_length)
+            # take care that the transition length is at least one sample
+            self.transition_length = max(self.transition_length, 1)
         else:
             raise TypeError(f"Length must be either 'float' or 'int'. Currently: '{type(transition_length)}'.")
 
@@ -740,6 +797,9 @@ class BaseTransition(SignalPart):
         rendered_from_signal[-self.transition_length:] = transition_values[:self.transition_length]
         rendered_to_signal[:self.transition_length] = transition_values[self.transition_length:]
         return rendered_from_signal, rendered_to_signal
+
+    def __str__(self):
+        return f"{self.__class__.__name__}(length={self.transition_length}, from={self.from_object.__class__.__name__}, to={self.to_object.__class__.__name__})"
 
 
 

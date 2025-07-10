@@ -59,7 +59,7 @@ class Signal:
     def get_randomizeable_parameter_values(self) -> dict[str: dict[str: typing.Any]]:
         return {'oscillation': self.oscillation.get_parameters_for_randomizations_values(),
                 'trend': self.trend.get_parameters_for_randomizations_values(),
-                'noise': self.trend.get_parameters_for_randomizations_values()}
+                'noise': self.noise.get_parameters_for_randomizations_values()}
 
     def render(self) -> np.ndarray:
         return self.parts_to_signal(self.render_parts())
@@ -84,6 +84,9 @@ class Signal:
 
         # compare the two oscillations for equality, they are equal if trend and oscillation are the same
         return self.oscillation == other.oscillation and self.trend == other.trend
+
+    def __str__(self):
+        return f"{self.oscillation}\n{self.trend}\n{self.noise}"
 
 
 class ChangeSignal:

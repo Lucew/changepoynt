@@ -32,19 +32,40 @@ class ContinuousGaussianDistribution(base.ParameterDistribution):
     This class models a conditional gaussian with a specifiable mean.
     """
 
-    def __init__(self, standard_deviation: float, minimum: float = None, maximum: float = None, default_mean: float = 0.0,
+    def __init__(self, standard_deviation: float, mean: float = 0.0, minimum: float = None, maximum: float = None,
                  random_generator: typing.Optional[np.random.Generator] = None):
         super().__init__(minimum, maximum, random_generator)
 
         # save the variables
         self.std = standard_deviation
-        self.default_mean = default_mean
+        self.mean = mean
 
     def generate_random_number(self, previous_value: typing.Union[float, int] = None) -> float:
-        # set the default value if necessary
-        if previous_value is None:
-            previous_value = self.default_mean
-        return self.random_generator.normal(previous_value, self.std)
+        return self.random_generator.normal(self.mean, self.std)
+
+
+class ContinuousPositiveGaussianDistribution(base.ParameterDistribution):
+    """
+    This class models a folded gaussian distribution that has values for 1 or higher
+    Values lower than that get mirrored to the other side.
+    """
+
+    def __init__(self, standard_deviation: float = 1, mean_point: float = 0.0, maximum: float = None,
+                 random_generator: typing.Optional[np.random.Generator] = None):
+        super().__init__(minimum=mean_point, maximum=maximum, random_generator=random_generator)
+
+        # save the variables
+        self.std = standard_deviation
+        self.mean_point = mean_point
+
+        # check that the mean point is positive
+        if mean_point < 0.0:
+            raise ValueError(f"{mean_point=} is negative. Must be positive.")
+        if mean_point > self.maximum:
+            raise ValueError(f"{mean_point=} is greater than {self.maximum=}. Must be smaller.")
+
+    def generate_random_number(self, previous_value: typing.Union[float, int] = None) -> int:
+        return abs(self.random_generator.normal(0.0, self.std))+self.mean_point
 
 
 class DiscreteConditionalGaussianDistribution(base.ParameterDistribution):
@@ -209,10 +230,21 @@ class PreferenceRandomSelector(base.RandomSelector):
             raise ValueError(f"'{preferred_probability=}' must be between 0.0 and 1.0.")
         self.preferred_probability = preferred_probability
 
+        # check whether we only have one choice
+        if len(choices) == 1:
+            self.preferred_probability = 1.0
+
     def get_selection(self, previous_value: str) -> str:
 
+        # initialize the probabilities per class
         probabilities = [0]*len(self.choices)
-        other_prob = (1-self.preferred_probability)/(len(self.choices)-1)
+
+        # compute the probabilities for other classes (but only if there is more than one choice
+        other_prob = 0
+        if len(self.choices) > 1:
+            other_prob = (1-self.preferred_probability)/(len(self.choices)-1)
+
+        # place the probabilities
         for idx, choice in enumerate(self.choices):
             if choice != self.preferred_choice:
                 probabilities[idx] = other_prob

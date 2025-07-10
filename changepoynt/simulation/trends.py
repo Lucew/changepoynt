@@ -11,17 +11,20 @@ class ConstantOffset(base.BaseTrend):
         return np.ones((self.length,))*self.offset
 
 
-class LinearTrend(base.BaseTrend):
-    offset = base.Parameter((float, int), limit=(-np.inf, np.inf), tolerance=0.01, default_parameter_distribution=rds.ContinuousConditionalGaussianDistribution(1))
-    slope = base.Parameter((float, int), limit=(-np.inf, 0, np.inf), tolerance=0.01, default_parameter_distribution=rds.ContinuousConditionalGaussianDistribution(.03, default_mean=0.04))
+class LinearTrend(ConstantOffset):
+    slope = base.Parameter((float, int), limit=(-np.inf, 0, np.inf), tolerance=0.01, default_parameter_distribution=rds.ContinuousConditionalGaussianDistribution(.01, default_mean=0.0))
     attachment_point = base.Parameter((float, int), limit=(-np.inf, np.inf), tolerance=0.1, modifiable=False, derived=True, use_random=False)
 
-    def compute_attachment_point(self):
+    def compute_attachment_point(self) -> float:
         # compute where the current slope ends
         return self.offset + self.slope * (self.shape[0] - 1)
 
     def render(self) -> np.ndarray:
         return self.offset + self.slope * np.linspace(0, self.shape[0]-1, self.shape[0])
+
+    def _final_offset(self) -> float:
+        # print('final_offset was called!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        return self.attachment_point
 
     def __eq__(self, other):
         """
