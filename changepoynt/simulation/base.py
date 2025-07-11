@@ -152,8 +152,13 @@ class Parameter:
         if default_value is not None:
             if not isinstance(default_value, param_type):
                 raise TypeError(f"Default value {default_value} does not match type {param_type.__name__}.")
-            if not self.limit[0] <= default_value <= self.limit[1]:
+            if not self.limit[0] <= default_value <= self.limit[-1]:
                 raise ValueError(f"Default value {default_value} out of range {limit}.")
+            # check the illicit values
+            for illicit_val in self.limit[1:-1]:
+                if abs(default_value - illicit_val) <= self.tolerance:
+                    raise ValueError(f"Default value {default_value} not allowed within tolerance ({self.tolerance}) of illicit value '{illicit_val}' in limit {self.limit}.")
+
         self.default_value = default_value
 
         # save whether we are ignoring the parameter for comparison

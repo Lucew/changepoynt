@@ -75,10 +75,42 @@ class OscillationRampTransition(base.BaseTransition):
         return np.concatenate((self.start_y, future_part))
 
 
+class OscillationOscillationRampTransition(base.BaseTransition):
+    allowed_from = (oscillations.Periodic,)
+    allowed_to = (oscillations.Periodic,)
+
+    def get_transition_values(self) -> np.ndarray:
+
+        # get the amplitude of start and end object (we know they will be of type oscillations.Periodic)
+        prev_ampl = abs(self.from_object.amplitude)
+        fut_ampl = abs(self.to_object.amplitude)
+
+        # compute the transition factor from the prev_ampl to the fut_ampl
+        diffed = fut_ampl - prev_ampl
+
+        # make sigmoid function
+        z = np.linspace(-5, 5, self.transition_length*2)
+        sigmoid = (1 / (1 + np.exp(-z)))
+
+        # multiply the second part with the sigmoid (which has an amplitude)
+        return np.concatenate((self.start_y*(1+sigmoid[:self.transition_length]*diffed/prev_ampl), self.end_y*(1-(1-sigmoid[self.transition_length:])*diffed/fut_ampl)))
+
+
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
 
     # make transitions between no oscillation and oscillation
+    plt.figure()
+    osci1 = oscillations.SineOscillation(1000, periods=15, amplitude=10)
+    osci2 = oscillations.SineOscillation(1000, periods=15, amplitude=100)
+    transition1 = OscillationOscillationRampTransition(200, osci1, osci2)
+    array = np.concatenate(transition1.apply(osci1.render(), osci2.render()))
+    plt.plot(array)
+    plt.show()
+    exit()
+
+    # make transitions between no oscillation and oscillation
+    plt.figure()
     osci1 = oscillations.NoOscillation(1000)
     osci2 = oscillations.SineOscillation(1000, periods=15)
     transition1 = OscillationRampTransition(200, osci1, osci2)
