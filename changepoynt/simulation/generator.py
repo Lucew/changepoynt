@@ -1,7 +1,6 @@
 import collections
 import typing
 import warnings
-from inspect import isclass
 
 import numpy as np
 
@@ -266,16 +265,13 @@ class ChangeSignalGenerator:
         # initialize the random signal selection -----------------------------------------------------------------------
 
         # get the possible classes for each signal part
-        self.possible_parts = {'trend': base.SignalPart.get_registered_signal_parts_group(base.BaseTrend),
-                               'noise': base.SignalPart.get_registered_signal_parts_group(base.BaseNoise),
-                               'oscillation': base.SignalPart.get_registered_signal_parts_group(base.BaseOscillation),
-                               'transition': base.SignalPart.get_registered_signal_parts_group(base.BaseTransition)}
+        self.possible_parts = self.get_possible_parts()
 
         # create the default values for the oscillation initial selector
         if initial_oscillation_selector is None:
             initial_oscillation_selector = rds.PreferenceRandomSelector(random_generator=self.random_generator,
                                                                         preferred_choice='NoOscillation',
-                                                                        preferred_probability=0.9,
+                                                                        preferred_probability=0.85,
                                                                         choices=list(self.possible_parts['oscillation'].keys()))
         # create the default values for the default oscillation selector
         if default_oscillation_selector is None:
@@ -284,7 +280,7 @@ class ChangeSignalGenerator:
                                                                          choices=list(self.possible_parts['oscillation'].keys()))
             default_oscillation_selector = rds.PreferenceRandomSelector(random_generator=self.random_generator,
                                                                         preferred_choice='NoOscillation',
-                                                                        preferred_probability=0.65,
+                                                                        preferred_probability=0.85,
                                                                         choices=list(self.possible_parts['oscillation'].keys()))
         # create the default value for the oscillation selectors
         if oscillation_selectors is None:
@@ -363,7 +359,7 @@ class ChangeSignalGenerator:
         # initialize random transition selection -----------------------------------------------------------------------
 
         # get all the transitions that are registered
-        self.possible_transitions = base.SignalPart.get_all_possible_transitions()
+        self.possible_transitions = self.get_possible_transitions()
 
         # create the default transition_selectors
         if oscillation_transition_selectors is None:
@@ -430,6 +426,17 @@ class ChangeSignalGenerator:
 
             # save the distribution
             self.transition_length_distributions[part_type] = length_distro
+
+    @classmethod
+    def get_possible_parts(cls):
+        return {'trend': base.SignalPart.get_registered_signal_parts_group(base.BaseTrend),
+                'noise': base.SignalPart.get_registered_signal_parts_group(base.BaseNoise),
+                'oscillation': base.SignalPart.get_registered_signal_parts_group(base.BaseOscillation),
+                'transition': base.SignalPart.get_registered_signal_parts_group(base.BaseTransition)}
+
+    @classmethod
+    def get_possible_transitions(cls):
+        return base.SignalPart.get_all_possible_transitions()
 
 
     def handle_signal_part_selectors(self,
