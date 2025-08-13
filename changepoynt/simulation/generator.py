@@ -175,7 +175,8 @@ class ChangeGenerator:
 
         # generate the number of events we aim for
         num_events = self.generate_number_of_events()
-        print('Number of events:', num_events)
+        if self.verbose:
+            print('Number of events:', num_events)
 
         # check whether we have enough events to get our num_lists
         if num_events < num_lists:
