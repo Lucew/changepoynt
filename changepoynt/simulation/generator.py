@@ -410,9 +410,9 @@ class ChangeSignalGenerator:
 
             if length_distro is None:
                 if part_type == 'oscillation':
-                    length_distro = rds.ContinuousPositiveGaussianDistribution(20.0, mean_point=5.0, maximum=49)
+                    length_distro = rds.ContinuousPositiveGaussianDistribution(20.0, mean_point=5.0, maximum=49, random_generator=self.random_generator)
                 elif part_type == 'trend':
-                    length_distro = rds.ContinuousPositiveGaussianDistribution(10.0, mean_point=3.0, maximum=49)
+                    length_distro = rds.ContinuousPositiveGaussianDistribution(10.0, mean_point=3.0, maximum=49, random_generator=self.random_generator)
 
             # check the type of the distribution
             if not isinstance(length_distro, base.ParameterDistribution):
