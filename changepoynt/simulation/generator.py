@@ -165,7 +165,7 @@ class ChangeGenerator:
         sampled_event_number = int(self.length / gamma_val)
 
         # now divide the length by the number of events
-        if sampled_event_number > max_events:
+        if sampled_event_number > max_events and self.verbose:
             warnings.warn(
                 f'The sampled event number ({sampled_event_number}) is larger than the allowed events. Defaulting to {max_events=}.')
         num_events = min(max_events, sampled_event_number)
