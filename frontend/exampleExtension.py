@@ -4,7 +4,7 @@ import changepoynt.simulation.base as simbase
 import changepoynt.simulation.randomizers as rds
 
 class SlowSine(simbase.BaseTrend):
-    amplitude = simbase.Parameter(float, 1.0, default_parameter_distribution=rds.ContinuousGaussianDistribution(10.0))
+    amplitude = simbase.Parameter(float, 1.0, default_parameter_distribution=rds.ContinuousGaussianDistribution(1.0))
 
     def render(self) -> np.ndarray:
         return np.sin(np.linspace(start=0.0, stop=np.pi, num=self.length))*self.amplitude

@@ -129,8 +129,6 @@ def get_change_signals(independent_signals: int, linking_weights: tuple[float,],
     return df, weights
 
 
-
-
 def app():
     st.set_page_config(layout="wide")
 
@@ -144,7 +142,7 @@ def app():
         signal_length = st.number_input('Signal Length', min_value=1000, max_value=100000, value=5000)
 
         # specify the event rate
-        event_rate = st.slider('Event Rate', min_value=0.0, max_value=1.0, value=0.05, step=0.01)
+        event_rate = st.slider('Event Rate', min_value=0.0, max_value=1.0, value=0.5, step=0.01)/10
 
         # specify the number of independent signals
         independent_signals = st.number_input('Independent Signals', min_value=2, max_value=50, value=4)
