@@ -147,7 +147,9 @@ class SST(Algorithm):
                                           rank=self.rank,
                                           randomized_rank=self.random_rank),
                         'naive': partial(_naive_singular_value_decomposition,
-                                          rank=self.rank)
+                                          rank=self.rank),
+                        'naive updated': partial(_naive_singular_value_decomposition_updated_score,
+                                         rank=self.rank)
                         }
         if self.method not in self.methods:
             raise ValueError(f'Method {self.method} not defined. Possible methods: {list(self.methods.keys())}.')
@@ -443,6 +445,37 @@ def _naive_singular_value_decomposition(hankel_past: np.ndarray, hankel_future: 
     eigvec_future = eigvec_future[:, :rank]
     s = np.linalg.svd(np.dot(eigvec_past.T, eigvec_future), full_matrices=False, compute_uv=False)
     return 1 - s[0], x0
+
+
+def _naive_singular_value_decomposition_updated_score(hankel_past: np.ndarray, hankel_future: np.ndarray,
+                                                      x0: np.ndarray, rank: int):
+    """
+    This function implements the naive sst as proposed in
+
+    Idé, Tsuyoshi, and Keisuke Inoue.
+    "Knowledge discovery from heterogeneous dynamic systems using change-point correlations."
+    Proceedings of the 2005 SIAM international conference on data mining.
+    Society for Industrial and Applied Mathematics, 2005.
+
+    but with the updated scoring function from
+
+    Idé, Tsuyoshi, and Koji Tsuda.
+    "Change-point detection using krylov subspace learning."
+    Proceedings of the 2007 SIAM International Conference on Data Mining.
+    Society for Industrial and Applied Mathematics, 2007.
+
+    :param hankel_past: the past hankel matrix
+    :param hankel_future: the future hankel matrix
+    :param x0: the random future eigenvector (not used at his point)
+    :param rank: the rank for the sst
+    :return: the score and the future vector
+    """
+    eigvec_past, _, _ = np.linalg.svd(hankel_past, full_matrices=False)
+    eigvec_future, _, _ = np.linalg.svd(hankel_future, full_matrices=False)
+    eigvec_past = eigvec_past[:, :rank]
+    eigvec_future = eigvec_future[:, :1]
+    alpha = eigvec_past.T @ eigvec_future
+    return 1 - alpha.T @ alpha, eigvec_future
 
 
 def main():
