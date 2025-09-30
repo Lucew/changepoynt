@@ -3,6 +3,8 @@ name: test-pypi-push
 # https://docs.pypi.org/trusted-publishers/using-a-publisher/
 on:
   push:
+    tags-ignore:
+      - '**'
     paths:
       - 'changepoynt/**'
       - 'tests/**'
