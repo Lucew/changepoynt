@@ -1,0 +1,13 @@
+# https://packaging.python.org/en/latest/tutorials/packaging-projects/
+
+# Install the build package to test build locally
+pip install --upgrade build
+
+# build the package locally to check whether it works
+python -m build
+
+# update the version in:
+./setup.py
+./pyproject.toml
+
+# make a commit and tag with message: (publish attempt)
