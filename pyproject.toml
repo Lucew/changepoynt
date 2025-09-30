@@ -30,4 +30,4 @@ Homepage = "https://github.com/Lucew/changepoynt"
 Issues = "https://github.com/Lucew/changepoynt/issues"
 
 [tool.setuptools]
-packages = ["changepoynt", "changepoynt.algorithms", "changepoynt.utils", "changepoynt.visualization", "changepoynt.simulation"]
+packages = ["changepoynt", "changepoynt.algorithms", "changepoynt.utils", "changepoynt.visualization"]
