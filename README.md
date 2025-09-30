@@ -129,7 +129,7 @@ are currently under development. An overview with sources can be seen here:
 |-----------|-----------------------------------------------------------------------------------|----------------------------|
 | SST       | [Idé](https://epubs.siam.org/doi/abs/10.1137/1.9781611972757.63)                  | Stable  :heavy_check_mark: |
 | IKA-SST   | [Idé](https://epubs.siam.org/doi/abs/10.1137/1.9781611972771.54)                  | Stable  :heavy_check_mark: |
-| RSST      | Weber                                                                             | Experimental               |
+| RSST      | [Boelter & Weber et al.](https://ntrs.nasa.gov/citations/20250002705) | Stable :heavy_check_mark:  |
 | RuLSIF    | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270) | Stable  :heavy_check_mark: |
 | uLSIF     | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270) | Stable  :heavy_check_mark: |
 | KLIEP     | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270) | Planned                    |
@@ -165,7 +165,7 @@ Fortunately, there is an easy workaround. Just add a small white noise to your s
 `signal += np.random.normal(0, 1e-4, size=signal.shape[0])`. With noise much smaller than you signal you will not
 introduce large additional change points and the methods will not fail.
 
-### Python 3.13 no supported for all methods
+### Python 3.13 not supported for all methods
 We are aware that some dependencies currently are not supporting Python 3.13 and higher.
 These packages are mostly used for the fast_hankel option, and we are currently checking whether to make those packages
 optional
