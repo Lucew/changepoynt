@@ -129,7 +129,7 @@ are currently under development. An overview with sources can be seen here:
 |-----------|-----------------------------------------------------------------------------------|----------------------------|
 | SST       | [Idé](https://epubs.siam.org/doi/abs/10.1137/1.9781611972757.63)                  | Stable  :heavy_check_mark: |
 | IKA-SST   | [Idé](https://epubs.siam.org/doi/abs/10.1137/1.9781611972771.54)                  | Stable  :heavy_check_mark: |
-| RSST      | [Boelter & Weber et al.](https://ntrs.nasa.gov/citations/20250002705) | Stable :heavy_check_mark:  |
+| ESST      | [Boelter & Weber et al.](https://ntrs.nasa.gov/citations/20250002705) | Stable :heavy_check_mark:  |
 | RuLSIF    | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270) | Stable  :heavy_check_mark: |
 | uLSIF     | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270) | Stable  :heavy_check_mark: |
 | KLIEP     | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270) | Planned                    |
