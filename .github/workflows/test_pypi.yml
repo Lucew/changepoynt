@@ -3,6 +3,7 @@ name: test-pypi-push
 # https://docs.pypi.org/trusted-publishers/using-a-publisher/
 on:
   push:
+    # https://github.com/orgs/community/discussions/25615
     tags-ignore:
       - '**'
     paths:
