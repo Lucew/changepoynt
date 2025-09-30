@@ -19,7 +19,7 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
-        python-version: [ '3.9', '3.11' ]
+        python-version: [ '3.9', '3.11', '3.12']
 
     steps:
       - uses: actions/checkout@v4
@@ -30,13 +30,13 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install .[test]
+          pip install -e .[test]
       - name: Test with pytest
         run: pytest
 
   # publish the package to test.pypi.org
   pypi-publish:
-    name: Upload release to PyPI
+    name: Upload release to test server PyPI
     needs: test-package
     runs-on: ubuntu-latest
     # Specifying a GitHub environment is optional, but strongly encouraged
@@ -52,6 +52,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Get the scripts file into the root directory
+        run: |
+          mv scripts/rename_version.sh .
       - name: Update the package Version for testing
         # https://stackoverflow.com/questions/54310050/how-to-version-build-artifacts-using-github-actions
         run: |
@@ -70,13 +73,13 @@ jobs:
 
   # download the package from the test repository and run the tests
   pypi-download-test:
-    name: Install Package from PyPI
+    name: Install Package from test server PyPI
     needs: pypi-publish
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
-        python-version: [ '3.9', '3.11' ]
+        python-version: [ '3.9', '3.11', '3.12']
 
     steps:
       - name: Set up Python ${{ matrix.python-version }}
@@ -91,11 +94,28 @@ jobs:
         with:
           sparse-checkout: |
             tests
-      - name: Install dependencies
-        # https://packaging.python.org/en/latest/guides/using-testpypi/
+            scripts
+            pyproject.toml
+      - name: Get the scripts file into the root directory
         run: |
-          python3 -m pip install pytest
-          python3 -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ changepoynt
+          mv scripts/extract_and_publish_version.sh .
+      - name: Extract the version number we are aiming to install
+        run: |
+          sh extract_and_publish_version.sh ${{ github.run_number }}
+      # retry the installation as test.pypi sometimes takes am moment to refresh
+      - name:
+        uses: nick-fields/retry@v2
+        with:
+          max_attempts: 3
+          retry_on: error
+          timeout_seconds: 100
+          retry_wait_seconds: 1
+          # https://github.com/actions/checkout#fetch-only-a-single-file
+          # get only the test files for the test of the installed package
+          # also we need the extra url to acquire the dependencies
+          command: |
+              python3 -m pip install pytest
+              python3 -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ changepoynt==${{ env.VERSION_WITH_BUILD }}
       - name: Test with pytest
         run: pytest
 

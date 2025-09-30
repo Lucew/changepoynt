@@ -19,7 +19,7 @@ classifiers = [
     "Topic :: Scientific/Engineering",
 ]
 license = {file = "LICENSE"}
-keywords = ['changepoint', 'times eries', 'engineering', 'SST', 'change point detection', 'CPD']
+keywords = ['changepoint', 'times series', 'engineering', 'SST', 'change point detection', 'CPD']
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
@@ -30,4 +30,4 @@ Homepage = "https://github.com/Lucew/changepoynt"
 Issues = "https://github.com/Lucew/changepoynt/issues"
 
 [tool.setuptools]
-packages = ["changepoynt", "changepoynt.algorithms", "changepoynt.utils", "changepoynt.visualization"]
+packages = ["changepoynt", "changepoynt.algorithms", "changepoynt.utils", "changepoynt.visualization", "changepoynt.simulation"]

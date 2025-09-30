@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# This script is for the github CI/CD so it can change the version number when upload to test.pypi.org
+# This scripts is for the github CI/CD so it can change the version number when upload to test.pypi.org
 # so we do not get build conflicts
 
 # Check if the number of arguments is correct

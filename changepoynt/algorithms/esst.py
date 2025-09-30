@@ -16,7 +16,13 @@ class ESST(Algorithm):
     """
     This class implements an own idea for change point detection.
 
-    It is not yet published, please use with caution and do not copy or use in production (Lucas Weber, 2023).
+    It has been published together with Sarah Boelter (UMN)
+    Boelter, Sarah*, Lucas Weber*, et al. "Fault Prediction in Planetary Drilling Using Subspace Analysis Techniques."
+    International Conference on Intelligent Autonomous Systems (IAS-19). 2025.
+    (* is equal contribution)
+    https://ntrs.nasa.gov/citations/20250002705
+
+    It is a research algorithm, please use with caution.
     """
 
     def __init__(self, window_length: int, n_windows: int = None, lag: int = None, rank: int = 5,
