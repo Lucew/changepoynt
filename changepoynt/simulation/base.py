@@ -294,6 +294,13 @@ class Parameter:
         # otherwise it will be set globally for all instances of this class
         instance._values[self.name] = value
 
+    def serialize(self) -> bool:
+        """
+        This function tells whether the parameter should be serialized or not.
+        :return: bool
+        """
+        return not self.derived
+
     def __str__(self):
         return f"{self.__class__.__name__} {self.name}({self.param_type=}, {self.default_value=}, {self.limit=}, {self.tolerance=}, {self.derived=}, {self.modifiable=}, {self.use_for_comparison=}, {self.use_random}, {self.default_parameter_distribution=})"
 
@@ -494,8 +501,8 @@ def check_first_arg_class():
 
 
 class SignalPart(metaclass=SignalPartMeta):
-    _registry = dict()
-    _parameters: dict[str: typing.Any]
+    _registry: dict[str: typing.Type] = dict()
+    _parameters: dict[str: Parameter]
     _minimum_length = 30
     type_name: str
 
@@ -676,7 +683,17 @@ class SignalPart(metaclass=SignalPartMeta):
 
         # go through the self defined parameters
         for name in self._parameters:
+
+            # check whether the parameter is derived
+            if not self._parameters[name].serialize():
+                continue
+
+            # get the value from the parameter
             value = getattr(self, name)
+
+            # check whether the object is serializable
+            if not is_json_serializable_type(type(value)):
+                raise TypeError(f'Parameter {name} for class {self.__class__.__name__} type {type(value)}, but must be serializable.')
             data[name] = value
 
         # check whether the current object is a transition. than we have to serialize the from and to object as well
@@ -972,6 +989,84 @@ class BaseTransition(SignalPart):
     def __str__(self):
         return f"{self.__class__.__name__}(length={self.transition_length}, from={self.from_object.__class__.__name__}, to={self.to_object.__class__.__name__})"
 
+
+class SignalPartCollectionMeta(type):
+
+    def __new__(cls, name, bases, namespace):
+
+        # instantiate the super class and get the path of the class file
+        new_cls = super().__new__(cls, name, bases, namespace)
+        cur_path_file = os.path.abspath(sys.modules[new_cls.__module__].__file__)
+
+        # check whether they have to_json and from_json functions
+        if bases and ('to_json_dict' not in namespace or 'from_json_dict' not in namespace):
+            raise AttributeError(f'Class {name} must have a to_json_dict and from_json_dict callable. File: {cur_path_file}.')
+
+        # ignore that for the base class
+        if bases:
+
+            # check whether a class with the name already exists
+            if name in SignalPartCollection._registry:
+                # get the file where the class is located
+                ex_path_file = os.path.abspath(sys.modules[SignalPartCollection._registry[name].__module__].__file__)
+                raise ValueError(f'Class {name} is already registered in SignalPart registry. '
+                                 f'Please change your class name.\n'
+                                 f'Problematic files:\n{ex_path_file}\n{cur_path_file}.')
+
+            # we have to register the new class in the class registry
+            SignalPartCollection._registry[name] = new_cls
+        return new_cls
+
+
+class SignalPartCollection(metaclass=SignalPartCollectionMeta):
+    """
+    This class mainly exists to keep track of all SignalPartCollections.
+    """
+    _registry: dict[str: typing.Type] = dict()
+    def __init__(self):
+        pass
+
+    @abc.abstractmethod
+    def to_json_dict(self):
+        raise NotImplementedError
+
+    @classmethod
+    @abc.abstractmethod
+    def from_json_dict(cls, parameter_json: str):
+        raise NotImplementedError
+
+    @classmethod
+    def process_dict(cls, parts_dict):
+        # check that we received the dict for a single signal
+        assert len(parts_dict) == 1, 'The dict contains more than one object.'
+        assert cls.__name__ in parts_dict, f'The element of the parts_dict has to be of class {cls.__name__}.'
+        change_signal = list(parts_dict.keys())[0]
+        parts_dict = parts_dict[change_signal]
+        return parts_dict
+
+    @classmethod
+    def get_registered_signal_parts(cls):
+        return cls._registry
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_json_dict())
+
+    @classmethod
+    def from_json(cls, parameter_json: str) -> typing.Self:
+
+        # load the string into memory
+        json_dict = json.loads(parameter_json)
+
+        # check that we received the dict for a single signal
+        assert len(json_dict) == 1, 'The dict contains more than one object.'
+        change_signal = list(json_dict.keys())[0]
+
+        # check that the name is a registered class and get the concerning class
+        if change_signal not in SignalPartCollection._registry:
+            raise ValueError(f'Class name {change_signal} is not a known class inheriting from SignalPartCollection.')
+
+        # process the information
+        return SignalPartCollection._registry[change_signal].from_json_dict(json_dict)
 
 
 if __name__ == "__main__":

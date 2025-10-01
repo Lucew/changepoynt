@@ -2,11 +2,11 @@
 import pytest
 import numpy as np
 
-import changepoynt.simulation as cpsim
 import changepoynt.simulation.base as simbase
 import changepoynt.simulation.randomizers as rds
 import changepoynt.simulation.generator as simgen
-from changepoynt.simulation.signals import ChangeSignal
+import changepoynt.simulation.signals as simsig
+import changepoynt.simulation.serialization as simser
 
 
 class TestSimulation:
@@ -22,7 +22,7 @@ class TestSimulation:
 
         # create the completely independent signals
         events = []
-        for _ in range(10):
+        for _ in range(50):
             event, _ = ceg.generate_independent_list_disturbed(1, 0)
             events.append(event[0])
 
@@ -71,6 +71,9 @@ class TestSimulation:
                     return np.sin(np.linspace(start=0.0, stop=np.pi, num=self.length)) * self.amplitude
 
             a = SineOscillationTESTCASEBLABLA(100, amplitude=np.int32(5))
+            del simbase.SignalPart._registry[a.__class__.__name__]
+            del a
+            del SineOscillationTESTCASEBLABLA
 
     def test_json_serialization(self):
 
@@ -81,10 +84,40 @@ class TestSimulation:
         signal_str = signal.to_json()
 
         # deserialize again
-        new_signal = ChangeSignal.from_json(signal_str)
+        new_signal = simsig.ChangeSignal.from_json(signal_str)
 
         # compare them for equality
         np.testing.assert_array_equal(signal.render(), new_signal.render())
+
+        # create a multivariate change point signal
+        multisig = simsig.ChangeSignalMultivariate(self.signals, [str(idx) for idx,_ in enumerate(self.signals)])
+        json_str = multisig.to_json()
+        new_multisig = simsig.ChangeSignalMultivariate.from_json(json_str)
+        np.testing.assert_array_equal(multisig.render(), new_multisig.render())
+
+    def test_json_generic_serialization(self):
+
+        # get a signal from the setup
+        signal = self.signals[0]
+
+        # serialize and deserialize the signal
+        signal_str = simser.to_json(signal)
+        assert type(signal_str) == str
+        print(type(signal_str))
+        new_signal = simser.from_json(signal_str)
+
+        # compare them for equality
+        np.testing.assert_array_equal(signal.render(), new_signal.render())
+
+        # create a multivariate change point signal
+        multisig = simsig.ChangeSignalMultivariate(self.signals, [str(idx) for idx,_ in enumerate(self.signals)])
+
+        # serialize and deserialize
+        json_str = simser.to_json(multisig)
+        new_multisig = simser.from_json(json_str)
+
+        # check whether it is still the same signal
+        np.testing.assert_array_equal(multisig.render(), new_multisig.render())
 
     def test_all_oscillations_implementations(self):
         pass

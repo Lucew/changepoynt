@@ -106,6 +106,8 @@ class ChangeGenerator:
         assert points[0] == 0 and points[-1] == maximum_value, 'Something with the random points is off.'
         points = points[1:-1]
 
+        # convert the points into an integer
+        points = list(map(int,points))
         return points
 
     def generate_dependent_list(self, original_lists: list[list[int]], linking_weights: list[float,]):

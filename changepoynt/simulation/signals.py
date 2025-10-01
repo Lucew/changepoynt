@@ -11,11 +11,12 @@ from changepoynt.simulation import trends
 from changepoynt.simulation import transitions
 
 
-class Signal:
+class Signal(base.SignalPartCollection):
     """
     This is the class for a Signal. The signal always consists of an Oscillation and Noise.
     """
     def __init__(self, oscillation: base.BaseOscillation, noise: base.BaseNoise = None, trend: base.BaseTrend = None):
+        super().__init__()
 
         if len(oscillation.shape) != 1:
             raise AttributeError(f"Oscillation has to be a 1D array. Currently: {len(oscillation.shape)}.")
@@ -98,25 +99,15 @@ class Signal:
     def from_json_dict(cls, parts_dict: dict[str: typing.Any]) -> typing.Self:
 
         # check that we received the dict for a single signal
-        assert len(parts_dict) == 1, 'The dict contains more than one Signal.'
-        assert cls.__name__ in parts_dict, 'The element of the parts_dict has to be a Signal.'
-        signal = list(parts_dict.keys())[0]
-        parts_dict = parts_dict[signal]
+        parts_dict = cls.process_dict(parts_dict)
 
         # instantiate the parts using the common base class (where each class is registered)
         instantiated_parts_dict = {part_type: base.SignalPart.from_json_dict(part_dict)
                                    for part_type, part_dict in parts_dict.items()}
         return cls.from_dict(instantiated_parts_dict)
 
-    def to_json(self) -> str:
-        return json.dumps(self.to_json_dict())
 
-    @classmethod
-    def from_json(cls, parameter_json: str) -> typing.Self:
-        return cls.from_json_dict(json.loads(parameter_json))
-
-
-class ChangeSignal:
+class ChangeSignal(base.SignalPartCollection):
     """
     This is the class for a Change signal. The change signal is always a concatenation of several Signals.
     """
@@ -124,6 +115,7 @@ class ChangeSignal:
                  oscillation_transition_list: list[typing.Union[base.BaseTransition, None]] = None,
                  trend_transition_list: list[typing.Union[base.BaseTransition, None]]= None,
                  general_trend: base.BaseTrend = None, general_noise: base.BaseNoise = None):
+        super().__init__()
 
         # make default value for the transition_lists
         if oscillation_transition_list is None:
@@ -229,10 +221,7 @@ class ChangeSignal:
     def from_json_dict(cls, parts_dict: dict[str: typing.Any]) -> typing.Self:
 
         # check that we received the dict for a single signal
-        assert len(parts_dict) == 1, 'The dict contains more than one ChangeSignal.'
-        assert cls.__name__ in parts_dict, 'The element of the parts_dict has to be a ChangeSignal.'
-        change_signal = list(parts_dict.keys())[0]
-        parts_dict = parts_dict[change_signal]
+        parts_dict = cls.process_dict(parts_dict)
 
         # get the list of things we can construct
         instantiated_parts_dict = {}
@@ -269,20 +258,14 @@ class ChangeSignal:
 
         return cls(**instantiated_parts_dict)
 
-    def to_json(self) -> str:
-        return json.dumps(self.to_json_dict())
 
-    @classmethod
-    def from_json(cls, parameter_json: str) -> typing.Self:
-        return cls.from_json_dict(json.loads(parameter_json))
-
-
-class ChangeSignalMultivariate:
+class ChangeSignalMultivariate(base.SignalPartCollection):
     """
     This is the class for a Change system. The system has multiple Change signals stacked along the zeroth axis.
     """
 
     def __init__(self, signals: list[ChangeSignal], signal_names:list[str] = None):
+        super().__init__()
 
         # check whether all signals have the same shape, we already checked whether they are one-dimensional
         # when constructing the ChangeSignal
@@ -306,6 +289,30 @@ class ChangeSignalMultivariate:
     @property
     def shape(self) -> tuple[int, int]:
         return len(self.signals), self.signals[0].shape[0]
+
+    def to_json_dict(self) -> dict[str: typing.Any]:
+
+        # initialize the dict
+        result_dict = {'signals': [signal.to_json_dict() for signal in self.signals],
+                       'signal_names': self.signal_names}
+
+        # make the signal list
+        return {self.__class__.__name__: result_dict}
+
+    @classmethod
+    def from_json_dict(cls, parts_dict: dict[str: typing.Any]) -> typing.Self:
+
+        # check that we received the dict for a single signal
+        parts_dict = cls.process_dict(parts_dict)
+
+        # get the list of things we can construct
+        instantiated_parts_dict = {}
+        for key, value in parts_dict.items():
+            if key == 'signals':
+                instantiated_parts_dict[key] = [ChangeSignal.from_json_dict(signal) for signal in value]
+            else:
+                instantiated_parts_dict[key] = value
+        return cls(**instantiated_parts_dict)
 
     @property
     def changepoints(self) -> list[list[int]]:
