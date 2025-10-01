@@ -4,6 +4,9 @@ import inspect
 import functools
 import sys
 import collections
+import json
+import os
+import warnings
 
 import numpy as np
 
@@ -101,6 +104,34 @@ class RandomSelector:
     @abc.abstractmethod
     def get_selection(self, prev_signal_part: str) -> str:
         raise NotImplementedError
+
+def is_json_serializable_type(tp) -> bool:
+    """
+    True if *instances of* `tp` are serializable by Python's stdlib `json`
+    encoder *without* custom hooks. Accepts plain runtime classes only
+    (no typing hints).
+    """
+
+    _BASIC_JSON_VALUE_TYPES = (str, int, float, bool, type(None))
+    _BASIC_JSON_CONTAINER_TYPES = (list, tuple, dict)
+    try:
+        # primitives
+        if issubclass(tp, _BASIC_JSON_VALUE_TYPES):
+            return True
+        # containers (including subclasses)
+        if issubclass(tp, _BASIC_JSON_CONTAINER_TYPES):
+            return True
+    except TypeError:
+        # not a class/type (e.g., an instance)
+        return False
+    return False
+
+def check_types_serializable(types):
+    """
+    Convenience helper for a list/iterable of types.
+    Returns {type: bool}.
+    """
+    return {tp: is_json_serializable_type(tp) for tp in types}
 
 
 class Parameter:
@@ -255,6 +286,10 @@ class Parameter:
         if not any(isinstance(value, paramtype) for paramtype in self.param_type):
             raise TypeError(f"Parameter '{self.name}' for class '{instance.__class__}' must be one of {self.param_type}. Currently: {type(value)}.")
 
+        # check the type of the value and whether it is serializable
+        if not is_json_serializable_type(type(value)):
+            warnings.warn(f"Parameter '{self.name}' for class '{instance.__class__}' of type {type(value)} is not JSON serializable.")
+
         # set the value of the instance and not of the parameter
         # otherwise it will be set globally for all instances of this class
         instance._values[self.name] = value
@@ -266,6 +301,11 @@ class Parameter:
 class SignalPartMeta(type):
 
     def __new__(cls, name, bases, namespace):
+
+        # check for some forbidded names
+        for disallowed_name in ('Signal', 'ChangeSignal', 'ChangeSignalMultivariate'):
+            if name == disallowed_name:
+                raise NameError(f'Name {name} is not allowed as a class name for a subclass of SignalPart (due to serialization).')
 
         # Collect parameters defined in this class
         parameters = {
@@ -289,8 +329,16 @@ class SignalPartMeta(type):
         # save the parameters in the current class
         namespace["_parameters"] = parameters
 
-        # instantiate the super class
+        # instantiate the super class and get the path of the class file
         new_cls = super().__new__(cls, name, bases, namespace)
+        cur_path_file = os.path.abspath(sys.modules[new_cls.__module__].__file__)
+
+        # check that there is type_name in the lower level classes
+        guard_attribute_overwrite(name, bases, namespace, 'type_name', cur_path_file)
+        guard_attribute_overwrite(name, bases, namespace, '_registry', cur_path_file)
+        guard_attribute_overwrite(name, bases, namespace, '_minimum_length', cur_path_file)
+
+        # check that we never initialize the
 
         # the current class is a transition and not the base class
         if bases and any(base.__name__ == 'BaseTransition' for base in bases):
@@ -298,44 +346,47 @@ class SignalPartMeta(type):
             # check that the every transition has allowed_from and allowed_to class attributes
             if 'allowed_from' not in namespace or 'allowed_to' not in namespace:
                 raise NotImplementedError(
-                    f"Class '{name}' is a Transition and needs to have 'allowed_from' 'allowed_to' as class variables.")
+                    f"Class '{name}' is a Transition and needs to have 'allowed_from' 'allowed_to' as class variables.\nFile: {cur_path_file}.")
 
             # test whether we properly defined the allowed_from and allowed_to attributes of the transition class
             from_to_objects = {'allowed_from': namespace['allowed_from'], 'allowed_to': namespace['allowed_to']}
             for object_name, object_list in from_to_objects.items():
                 if not isinstance(object_list, tuple):
-                    raise TypeError(f"Attribute '{object_name}' of class '{cls.__name__}' has to be of type tuple. Currently: {type(object_list)}.")
+                    raise TypeError(f"Attribute '{object_name}' of class '{cls.__name__}' has to be of type tuple. Currently: {type(object_list)}.\nFile: {cur_path_file}.")
                 if len(object_list) == 0:
-                    raise ValueError(f"Attribute '{object_name}' of class '{cls.__name__}' has to specify at least one object.")
+                    raise ValueError(f"Attribute '{object_name}' of class '{cls.__name__}' has to specify at least one object.\nFile: {cur_path_file}.")
                 if not all(inspect.isclass(objects) and issubclass(objects, SignalPart) and inspect.isclass(objects) for objects in object_list):
-                    raise TypeError(f"All objects {object_name} of class '{cls.__name__}' have to be a subclass of SignalPart. Currently: {object_list}.")
+                    raise TypeError(f"All objects {object_name} of class '{cls.__name__}' have to be a subclass of SignalPart. Currently: {object_list}.\nFile: {cur_path_file}.")
+
+        # define the forbidden parameter names
+        forbidden_parameter_names = {'length', 'allowed_from', 'allowed_to'}
 
         # Check for derived parameters and verify compute method exists
         # also check that no parameter length is defined
         for param in parameters.values():
 
             # check for the parameter length
-            if param.name == 'length':
-                raise NameError(f'Class {name}: Every signal has a length and it can not be defined as a parameter.')
+            if param.name in forbidden_parameter_names:
+                raise NameError(f'Class {name}: Parameter {param.name} is forbidden as superclasses use it.\nFile: {cur_path_file}.')
 
             # check that the name is not containing any upper case characters
             if not param.name.islower():
-                raise NameError(f"'Class {name}: {param.name} must be all lowercase letter.")
+                raise NameError(f"'Class {name}: {param.name} must be all lowercase letter.\nFile: {cur_path_file}.")
 
             # check that all derived parameters have a computation function
             if param.derived and not hasattr(new_cls, f"compute_{param.name}"):
-                raise TypeError(f"'Class {name}: Derived parameter '{param.name}' is missing compute method 'compute_{param.name}'.")
+                raise TypeError(f"'Class {name}: Derived parameter '{param.name}' is missing compute method 'compute_{param.name}'.\nFile: {cur_path_file}.")
 
         # check that the render function returns a numpy array
         has_render = has_concrete_render(new_cls)
         if has_render:
             return_type = typing.get_type_hints(getattr(new_cls, "render"))
             if 'return' not in return_type:
-                raise NotImplementedError(f"The render function of class {name} is missing a return type annotation.")
+                raise NotImplementedError(f"The render function of class {name} is missing a return type annotation.\nFile: {cur_path_file}.")
 
             return_type = return_type['return']
             if return_type != np.ndarray:
-                raise TypeError(f"The render function of class {name} has to return np.ndarray. Currently the type hint says: {return_type}.")
+                raise TypeError(f"The render function of class {name} has to return np.ndarray. Currently the type hint says: {return_type}.\nFile: {cur_path_file}.")
 
         # check whether there are any methods for acquiring a final parameter that start with _final_
         # if that is, it has to return a value of the same type as the parameter allowed types
@@ -349,19 +400,19 @@ class SignalPartMeta(type):
 
                 # check that it is indeed a function
                 if not callable(finalobj):
-                    raise TypeError(f"All properties of class {name} that start with '_final_' are reserved for functions that compute final parameter values. Currently it is not a callable, but {type(finalobj)}.")
+                    raise TypeError(f"All properties of class {name} that start with '_final_' are reserved for functions that compute final parameter values. Currently it is not a callable, but {type(finalobj)}.\nFile: {cur_path_file}.")
 
                 # check that it returns the correct type
                 return_type = typing.get_type_hints(finalobj)
                 if 'return' not in return_type:
-                    raise NotImplementedError(f"The render function of class {name} is missing a return type annotation.")
+                    raise NotImplementedError(f"The render function of class {name} is missing a return type annotation.\nFile: {cur_path_file}.")
 
                 # get the name of the parameter it returns
                 param_name = finalfunc.replace('_final_', '')
 
                 # check whether the paramater exists
                 if param_name not in parameters:
-                    raise NotImplementedError(f"The function {finalfunc} of class {name} aims to compute {param_name=}, but this parameter does not exist.")
+                    raise NotImplementedError(f"The function {finalfunc} of class {name} aims to compute {param_name=}, but this parameter does not exist.\nFile: {cur_path_file}.")
 
                 # get the parameter itself
                 curparam = parameters[param_name]
@@ -369,15 +420,45 @@ class SignalPartMeta(type):
                 # check that the returned type is correct
                 return_type = return_type['return']
                 if return_type not in curparam.param_type:
-                    raise TypeError(f"The render function of class {name} has to return np.ndarray. Currently the type hint says: {return_type}.")
+                    raise TypeError(f"The render function of class {name} has to return np.ndarray. Currently the type hint says: {return_type}.\nFile: {cur_path_file}.")
 
 
         # put the class into the registry
         if has_render and SignalPart not in bases:
+
+            # check that there are no duplicate classes
+            if name in SignalPart._registry:
+
+                # get the file where the class is located
+                ex_path_file = os.path.abspath(sys.modules[SignalPart._registry[name].__module__].__file__)
+                raise ValueError(f'Class {name} is already registered in SignalPart registry. '
+                                 f'Please change your class name.\n'
+                                 f'Problematic files:\n{ex_path_file}\n{cur_path_file}.')
             SignalPart._registry[name] = new_cls
 
         # return the new class
         return new_cls
+
+
+def guard_attribute_overwrite(cls_name: str, cls_bases:tuple[type,], cls_namespace: dict[str: typing.Any], attribute_name: str, cur_path_file: str = "") -> bool:
+
+    # check whether the class has any base classes
+    if not cls_bases:
+        return True
+
+    # check whether the attribute is in the namespace of the current class
+    if attribute_name not in cls_namespace:
+        return True
+
+    # check whether a base class has a different parameter than the current class
+    base_has_different = any(getattr(base, attribute_name) != cls_namespace[attribute_name]
+                             for base in cls_bases if hasattr(base, attribute_name))
+
+    # throw an error if one of the base classes has defined the parameter differently
+    if base_has_different:
+        raise AttributeError(f'Class {cls_name} has an attribute named "{attribute_name}". '
+                             f'This attribute is not allowed.\nFile: {cur_path_file}.')
+    return True
 
 
 def has_concrete_render(cls):
@@ -414,16 +495,24 @@ def check_first_arg_class():
 
 class SignalPart(metaclass=SignalPartMeta):
     _registry = dict()
+    _parameters: dict[str: typing.Any]
     _minimum_length = 30
     type_name: str
 
     def __init__(self, length: int, **kwargs):
 
-        # save and check the length
+        # save the minimum length
         self.minimum_length = self._minimum_length if not isinstance(self, BaseTransition) else 0
-        length = length
-        if length < self.minimum_length:
-            raise ValueError(f'Instance class {self.__class__} length is too short: {length} < {self.minimum_length}.')
+
+        # save and check the length
+        if not isinstance(self, BaseTransition):
+            if not isinstance(length, int):
+                raise TypeError(f"The defined {length=} is not an int (it is {type(length)}).")
+            if length < self.minimum_length:
+                raise ValueError(f'Instance class {self.__class__} length is too short: {length} < {self.minimum_length}.')
+        else:
+            if not isinstance(length, int) and not isinstance(length, float):
+                raise TypeError(f"The defined {length=} is not an int or float (it is {type(length)}).")
         self.length = length
 
         # make a dict that the parameter can fill to save information
@@ -577,17 +666,54 @@ class SignalPart(metaclass=SignalPartMeta):
                 return False
         return True
 
-    def to_dict(self):
-        data = {}
+    def to_json_dict(self) -> dict[str: typing.Any]:
+
+        # initialize the parameter dict
+        data = dict()
+
+        # save the length
+        data['length'] = self.length
+
+        # go through the self defined parameters
         for name in self._parameters:
             value = getattr(self, name)
             data[name] = value
-        return data
+
+        # check whether the current object is a transition. than we have to serialize the from and to object as well
+        if isinstance(self, BaseTransition):
+            data['from_object'] = self.from_object.to_json_dict()
+            data['to_object'] = self.to_object.to_json_dict()
+
+        return {self.__class__.__name__: data}
 
     @classmethod
-    def from_dict(cls, data):
-        instance = cls(**data)
-        return instance
+    def from_json_dict(cls, parameter_dict: dict[str: typing.Any]) -> typing.Self:
+
+        # get the classes that are registered as a signal part
+        signal_part_constructors = SignalPart.get_registered_signal_parts()
+
+        # check that the dict only contains information about a single SignalPart
+        if len(parameter_dict) != 1:
+            raise ValueError(f'Expected parameters of one object (one key), got {len(parameter_dict)} keys.')
+
+        # get the class name from the parameter dictionary
+        class_name = list(parameter_dict.keys())[0]
+
+        # check whether the class is registered
+        if class_name not in signal_part_constructors:
+            raise ValueError(f'Unknown class {class_name}. Maybe you are missing the implementation?')
+
+        # get the constructor from the registry (class name is unique that is tested in SignalPartMeta class)
+        class_constructor = signal_part_constructors[class_name]
+
+        # check whether the current class constructor is a transitions
+        if issubclass(class_constructor, BaseTransition):
+
+            # instantiate the from and to object
+            parameter_dict[class_name]['from_object'] = SignalPart.from_json_dict(parameter_dict[class_name]['from_object'])
+            parameter_dict[class_name]['to_object'] = SignalPart.from_json_dict(parameter_dict[class_name]['to_object'])
+
+        return class_constructor(**parameter_dict[class_name])
 
     @classmethod
     def get_parameters(cls):
@@ -623,6 +749,19 @@ class SignalPart(metaclass=SignalPartMeta):
         for paramname, parameter in self.get_parameters().items():
             return_str.append(f"\t{paramname} = {getattr(self,paramname)}")
         return "\n".join(return_str)
+
+    def to_json(self) -> str:
+
+        # get the parameters of the signal part in a dictionary
+        parameter_dict = self.to_json_dict()
+
+        # transform the dictionary into a json
+        parameter_json = json.dumps(parameter_dict)
+        return parameter_json
+
+    @classmethod
+    def from_json(cls, parameter_json: str) -> typing.Self:
+        return cls.from_json_dict(json.loads(parameter_json))
 
 
 class BaseOscillation(SignalPart):
@@ -690,18 +829,34 @@ class BaseTransition(SignalPart):
         """
         raise NotImplementedError
 
-    def __init__(self, transition_length: typing.Union[int, float], from_object: SignalPart, to_object: SignalPart):
+    def __init__(self, length: typing.Union[int, float], from_object: typing.Optional[SignalPart] = None, to_object: typing.Optional[SignalPart] = None):
 
         # the length of a transition is the two signals combined
-        super().__init__(from_object.shape[0]+to_object.shape[0])
+        super().__init__(length)
+        self.transition_length = None
+        self.from_object = None
+        self.to_object = None
+        self.start_y = None
+        self.end_y = None
+        self.__objects_registered = False
+
+        # register the from and to objects if they are existing
+        self.register_from_to_objects(from_object, to_object)
+
+    def register_from_to_objects(self, from_object: [SignalPart | None], to_object: [SignalPart | None]):
+
+        # check whether both are None. in this case we ignore
+        if from_object is None and to_object is None:
+            return
 
         # check whether the from and to object are allowed
         if not any(isinstance(from_object, allowed_from) for allowed_from in self.allowed_from):
-            raise TypeRestrictedError(f"'from_object' must be one of types {self.allowed_from}.")
+            raise TypeRestrictedError(f"'from_object' must be one of types {self.allowed_from}. Currently: {type(from_object)}.")
         if not any(isinstance(to_object, allowed_to) for allowed_to in self.allowed_to):
-            raise TypeRestrictedError(f"'to_object' must be one of types {self.allowed_to}.")
+            raise TypeRestrictedError(f"'to_object' must be one of types {self.allowed_to}. Currently: {type(to_object)}.")
 
         # check that the length is at least one
+        transition_length = self.length
         if isinstance(transition_length, int):
             if transition_length < 1:
                 raise ValueError(f"In case of an 'int' type 'length' must be greater than 0. Currently: '{transition_length}'.")
@@ -709,7 +864,7 @@ class BaseTransition(SignalPart):
         elif isinstance(transition_length, float):
             if not 0 < transition_length < 0.5:
                 raise ValueError(f"In case of a 'float' type 'length' must be in interval (0, 0.5) exclusively. Currently: '{transition_length}'.")
-            self.transition_length = int(min(from_object.shape[0], to_object.shape[0])*transition_length)
+            self.transition_length = int(min(from_object.shape[0], to_object.shape[0]) * transition_length)
             # take care that the transition length is at least one sample
             self.transition_length = max(self.transition_length, 1)
         else:
@@ -723,19 +878,24 @@ class BaseTransition(SignalPart):
         if not any(isinstance(from_object, target_class) and isinstance(to_object, target_class) for target_class in SignalPart.get_immediate_subclasses()):
             raise TypeError(f"'{from_object.__class__=}' and '{to_object.__class__=}' have to both be of the same SignalPartType (One of: {SignalPart.get_immediate_subclasses()}).")
 
+        # check that both from and to objects are longer or equal to the transition length
+        if from_object.shape[0] // 2 < self.transition_length:
+            raise ValueError(
+                f"The specified 'transition_length' ({transition_length}) has to be shorter than half the length of the 'from_object' ({from_object.shape[0] // 2}).")
+        if to_object.shape[0] // 2 < self.transition_length:
+            raise ValueError(
+                f"The 'transition_length' ({transition_length}) has to be shorter than half the length of the 'to_object' ({from_object.shape[0] // 2}).")
+
         # save the object we are coming from
         self.from_object = from_object
         self.to_object = to_object
 
-        # check that both from and to objects are longer or equal to the transition length
-        if from_object.shape[0]//2 < self.transition_length:
-            raise ValueError(f"The specified 'transition_length' ({transition_length}) has to be shorter than half the length of the 'from_object' ({from_object.shape[0]//2}).")
-        if to_object.shape[0]//2 < self.transition_length:
-            raise ValueError(f"The 'transition_length' ({transition_length}) has to be shorter than half the length of the 'to_object' ({from_object.shape[0]//2}).")
-
         # get the start y-values and end y-values by rendering both objects
         self.start_y = from_object.render()[-self.transition_length:]
         self.end_y = to_object.render()[:self.transition_length]
+
+        # mark that we have registered the elements
+        self.__objects_registered = True
 
     @abc.abstractmethod
     def get_transition_values(self) -> np.ndarray:
@@ -765,6 +925,10 @@ class BaseTransition(SignalPart):
         :return: Tuple[np.ndarray, np.ndarray], (TransitionValuesFrom, TransitionValuesTo)
         """
 
+        # check whether we have registered from and to objects
+        if not self.__objects_registered:
+            raise AttributeError(f"The from_object and to_object have not yet been registered.")
+
         # get the transition values from the actual implementation
         transition_values = self.get_transition_values()
 
@@ -789,6 +953,9 @@ class BaseTransition(SignalPart):
         :return: Changed numpy arrays, modified inplace!
         """
 
+        # try to render first so non-registered object error will bubble up immediately
+        transition_values = self.render()
+
         # check that the signals have been rendered by the objects specified (and not altered)
         from_rendered = self.from_object.render()[-self.transition_length:]
         if not np.all(np.equal(rendered_from_signal[-self.transition_length:], from_rendered)):
@@ -798,7 +965,6 @@ class BaseTransition(SignalPart):
             raise ValueError(f"The 'rendered_to_signal[:self.transition_length]' unequal to the rendered to_object. Is the input array different than rendered from the 'to_object'?")
 
         # render the current overlap signal
-        transition_values = self.render()
         rendered_from_signal[-self.transition_length:] = transition_values[:self.transition_length]
         rendered_to_signal[:self.transition_length] = transition_values[self.transition_length:]
         return rendered_from_signal, rendered_to_signal

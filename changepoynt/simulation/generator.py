@@ -95,11 +95,11 @@ class ChangeGenerator:
         for idx in idces:
             gaps[idx] += 1
 
-        # Generate the points from the gaps
+        # Generate the points from the gaps (and make sure they are ints for serialization)
         points = [0]
         current = 0
         for gap in gaps:
-            current += minimum_distance + gap
+            current += int(minimum_distance + gap)
             points.append(current)
 
         # throw away start and end point (they are fixed)
@@ -608,7 +608,7 @@ class ChangeSignalGenerator:
             transition_class = self.possible_transitions[part_name][(prev, fut)][transition_name]
 
             # instantiate the class randomly
-            curtrans = transition_class(transition_length=self.transition_length_distributions[part_name].get_parameter(0.0)/100, from_object=prev_signal_parts[part_name], to_object=fut_signal_parts[part_name])
+            curtrans = transition_class(length=self.transition_length_distributions[part_name].get_parameter(0.0)/100, from_object=prev_signal_parts[part_name], to_object=fut_signal_parts[part_name])
 
             # save the transition
             output_transitions[part_name] = curtrans

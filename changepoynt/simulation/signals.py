@@ -1,5 +1,6 @@
 import typing
 import itertools
+import json
 
 import numpy as np
 
@@ -72,10 +73,6 @@ class Signal:
         # we have tested noise and signal to be the same shape when constructing this class
         return self.oscillation.shape
 
-    @classmethod
-    def from_dict(cls, params: dict[str: base.SignalPart]) -> 'Signal':
-        return cls(**params)
-
     def __eq__(self, other: "Signal") -> bool:
 
         # check that we are only compared to another Signal
@@ -87,6 +84,36 @@ class Signal:
 
     def __str__(self):
         return f"{self.oscillation}\n{self.trend}\n{self.noise}"
+
+    @classmethod
+    def from_dict(cls, params: dict[str: base.SignalPart]) -> typing.Self:
+        return cls(**params)
+
+    def to_json_dict(self) -> dict[str: typing.Any]:
+        return {self.__class__.__name__:
+                    {part_name: part.to_json_dict() for part_name, part in self.get_signal_parts().items()}
+                }
+
+    @classmethod
+    def from_json_dict(cls, parts_dict: dict[str: typing.Any]) -> typing.Self:
+
+        # check that we received the dict for a single signal
+        assert len(parts_dict) == 1, 'The dict contains more than one Signal.'
+        assert cls.__name__ in parts_dict, 'The element of the parts_dict has to be a Signal.'
+        signal = list(parts_dict.keys())[0]
+        parts_dict = parts_dict[signal]
+
+        # instantiate the parts using the common base class (where each class is registered)
+        instantiated_parts_dict = {part_type: base.SignalPart.from_json_dict(part_dict)
+                                   for part_type, part_dict in parts_dict.items()}
+        return cls.from_dict(instantiated_parts_dict)
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_json_dict())
+
+    @classmethod
+    def from_json(cls, parameter_json: str) -> typing.Self:
+        return cls.from_json_dict(json.loads(parameter_json))
 
 
 class ChangeSignal:
@@ -186,6 +213,68 @@ class ChangeSignal:
 
         # go through the signals and collect their length
         return list(itertools.accumulate(signal.shape[0] for signal in self.signals))
+
+    def to_json_dict(self) -> dict[str: typing.Any]:
+
+        # initialize the dict
+        result_dict = {'signal_list': [signal.to_json_dict() for signal in self.signals],
+                       'oscillation_transition_list': [trans.to_json_dict() for trans in self.oscillation_transitions],
+                       'trend_transition_list': [trans.to_json_dict() for trans in self.trend_transitions],
+                       'general_trend': self.trend.to_json_dict(), 'general_noise': self.noise.to_json_dict()}
+
+        # make the signal list
+        return {self.__class__.__name__: result_dict}
+
+    @classmethod
+    def from_json_dict(cls, parts_dict: dict[str: typing.Any]) -> typing.Self:
+
+        # check that we received the dict for a single signal
+        assert len(parts_dict) == 1, 'The dict contains more than one ChangeSignal.'
+        assert cls.__name__ in parts_dict, 'The element of the parts_dict has to be a ChangeSignal.'
+        change_signal = list(parts_dict.keys())[0]
+        parts_dict = parts_dict[change_signal]
+
+        # get the list of things we can construct
+        instantiated_parts_dict = {}
+        for key_name, value_object in parts_dict.items():
+            if isinstance(value_object, list):
+                if key_name == 'signal_list':
+                    instantiated_parts_dict[key_name] = [Signal.from_json_dict(list_obj) for list_obj in value_object]
+                else:
+                    instantiated_parts_dict[key_name] = [base.SignalPart.from_json_dict(list_obj)
+                                                         if list_obj is not None else list_obj
+                                                         for list_obj in value_object]
+            else:
+                instantiated_parts_dict[key_name] = base.SignalPart.from_json_dict(value_object) if value_object is not None else value_object
+
+
+        # check the length of the lists
+        expected_length = len(instantiated_parts_dict['signal_list'])-1
+        oscillation_transition_length = len(instantiated_parts_dict['oscillation_transition_list'])
+        trend_transition_length = len(instantiated_parts_dict['trend_transition_list'])
+        if oscillation_transition_length != expected_length:
+            raise ValueError(f'The serialized transition list needs {expected_length} elements but has {oscillation_transition_length} elements.')
+        if trend_transition_length != expected_length:
+            raise ValueError(f'The serialized transition list needs {expected_length} elements but has {trend_transition_length} elements.')
+
+        # register the signals in the transitions
+        element_iterator = zip(instantiated_parts_dict['signal_list'],
+                               instantiated_parts_dict['signal_list'][1:],
+                               instantiated_parts_dict['oscillation_transition_list'],
+                               instantiated_parts_dict['trend_transition_list']
+                               )
+        for signal1, signal2, oscillation_transition, trend_transition in element_iterator:
+            oscillation_transition.register_from_to_objects(signal1.oscillation, signal2.oscillation)
+            trend_transition.register_from_to_objects(signal1.trend, signal2.trend)
+
+        return cls(**instantiated_parts_dict)
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_json_dict())
+
+    @classmethod
+    def from_json(cls, parameter_json: str) -> typing.Self:
+        return cls.from_json_dict(json.loads(parameter_json))
 
 
 class ChangeSignalMultivariate:
