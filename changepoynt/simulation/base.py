@@ -780,6 +780,20 @@ class SignalPart(metaclass=SignalPartMeta):
     def from_json(cls, parameter_json: str) -> typing.Self:
         return cls.from_json_dict(json.loads(parameter_json))
 
+    def copy(self) -> typing.Self:
+        """
+        This function uses serialization to create a deep copy of an object.
+        :return: The copy of the same type
+        """
+
+        # serialize the object
+        json_str = self.to_json()
+
+        # deserialize the object
+        copy_object = SignalPart.from_json(json_str)
+
+        return copy_object
+
 
 class BaseOscillation(SignalPart):
     """
@@ -1067,6 +1081,20 @@ class SignalPartCollection(metaclass=SignalPartCollectionMeta):
 
         # process the information
         return SignalPartCollection._registry[change_signal].from_json_dict(json_dict)
+
+    def copy(self) -> typing.Self:
+        """
+        This function uses serialization to create a deep copy of an object.
+        :return: The copy of the same type
+        """
+
+        # serialize the object
+        json_str = self.to_json()
+
+        # deserialize the object
+        copy_object = SignalPartCollection.from_json(json_str)
+
+        return copy_object
 
 
 if __name__ == "__main__":

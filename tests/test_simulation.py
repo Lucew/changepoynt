@@ -119,6 +119,64 @@ class TestSimulation:
         # check whether it is still the same signal
         np.testing.assert_array_equal(multisig.render(), new_multisig.render())
 
+    def test_copy(self):
+
+        # get a signal from the setup
+        signal = self.signals[0]
+
+        # make a copy of the signal
+        signal_copy = signal.copy()
+        print(signal)
+
+        # check for equality
+        assert signal == signal_copy
+
+        # compare their renders for equality
+        np.testing.assert_array_equal(signal.render(), signal_copy.render())
+
+        # check whether they are the same object
+        assert not signal is signal_copy
+
+    def test_concatenate(self):
+
+        # get a signal from the setup
+        signal = self.signals[0]
+        signal2 = self.signals[1]
+
+        # concatenate the signals
+        signal_concat = signal.concatenate(signal2)
+
+        # serialize the concatenated signal
+        signal_concat_copy = signal_concat.copy()
+
+        # check for equality of the concatenated signals with the original signals
+        np.testing.assert_array_equal(signal_concat.render(), np.concatenate((signal.render(), signal2.render())))
+
+        # check whether serialization still works
+        signal_concat.render()
+        signal_concat_copy.render()
+        np.testing.assert_array_equal(signal_concat.render(), signal_concat_copy.render())
+
+    def test_extend(self):
+
+        # get a signal from the setup
+        signal_concat = self.signals[0]
+
+        # extend the complete other signals
+        signal_concat = signal_concat.extend(self.signals[1:])
+
+        # create the other array by using numpy concatenate
+        other_array = np.concatenate(tuple(sig.render() for sig in self.signals))
+
+        # check for equality of the concatenated signals with the original signals
+        np.testing.assert_array_equal(signal_concat.render(), other_array)
+
+        # check whether serialization still works
+        signal_concat.render()
+        signal_concat_copy = signal_concat.copy()
+        signal_concat_copy.render()
+        np.testing.assert_array_equal(signal_concat.render(), signal_concat_copy.render())
+
     def test_all_oscillations_implementations(self):
         pass
 

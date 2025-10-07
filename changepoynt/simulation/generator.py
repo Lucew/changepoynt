@@ -630,6 +630,10 @@ class ChangeSignalGenerator:
 
     def generate_from_events(self, event_list: list[int,]) -> signals.ChangeSignal:
 
+        # check whether the list contains only ints
+        if not all(isinstance(ele, int) for ele in event_list):
+            raise ValueError(f"event_list must be a list of integers.")
+
         # go through the list of events and create the signals
         previous_signal = None
         signal_list = []

@@ -186,8 +186,16 @@ class ChangeSignal(base.SignalPartCollection):
 
         # apply the trend and oscillation transitions
         for idx, (signal_from, signal_to, oscillation_transition, trend_transition) in enumerate(zip(rendered_signals, rendered_signals[1:], self.oscillation_transitions, self.trend_transitions)):
-            oscillation_transition.apply(signal_from['oscillation'], signal_to['oscillation'])
-            trend_transition.apply(signal_from['trend'], signal_to['trend'])
+            try:
+                oscillation_transition.apply(signal_from['oscillation'], signal_to['oscillation'])
+            except ValueError as e:
+                print(f'We stopped {self.__class__.__name__} rendering at oscillation transition {idx} (type {oscillation_transition.__class__.__name__}) because of an error.')
+                raise e
+            try:
+                trend_transition.apply(signal_from['trend'], signal_to['trend'])
+            except ValueError as e:
+                print(f'We stopped {self.__class__.__name__} rendering at trend transition {idx} (type {trend_transition.__class__.__name__}) because of an error.')
+                raise e
 
         # sum the signal parts for a complete signals
         rendered_signals = [Signal.parts_to_signal(signal_parts) for signal_parts in rendered_signals]
@@ -199,6 +207,34 @@ class ChangeSignal(base.SignalPartCollection):
     def shape(self) -> tuple[int,]:
         # we already tested that all signal are one-dimensional in the constructor
         return (sum(signal.shape[0] for signal in self.signals), )
+
+    def __eq__(self, other: "ChangeSignal") -> bool:
+
+        # check that we are only compared to another Signal
+        if not isinstance(other, type(self)):
+            raise TypeError(f"Signals can only be compared to other Signals.")
+
+        # compare the two oscillations for equality, they are equal if trend and oscillation are the same
+        signal_equal = all(ele1 == ele2 for ele1, ele2 in zip(self.signals, other.signals))
+        transitions_equal = all(ele1 == ele2 for ele1, ele2 in zip(self.trend_transitions, other.trend_transitions))
+        noise_equal = self.noise == other.noise
+        trend_equal = self.trend == other.trend
+        return signal_equal and transitions_equal and noise_equal and trend_equal
+
+    def __str__(self):
+
+        # go through the signals and print them
+        output = []
+        for idx, signal in enumerate(self.signals):
+            if idx&1:
+                output.append(f'Transition {idx-1}:')
+                output.append(str(self.trend_transitions[idx-1]))
+                output.append(str(self.oscillation_transitions[idx-1]))
+                output.append('')
+            output.append(f'Signal {idx}:')
+            output.append(str(signal))
+            output.append('')
+        return '\n'.join(output)
 
     @property
     def changepoints(self) -> list[int]:
@@ -257,6 +293,106 @@ class ChangeSignal(base.SignalPartCollection):
             trend_transition.register_from_to_objects(signal1.trend, signal2.trend)
 
         return cls(**instantiated_parts_dict)
+
+    def _check_and_copy_other_signal(self, other_change_signal: typing.Self):
+
+        other_signal = other_change_signal.copy()
+
+        # check whether the signal has no general noise and trend
+        # otherwise concatenation makes no sense
+        if self.noise != other_signal.noise or not isinstance(self.noise, noises.NoNoise):
+            raise ValueError(f'Two signals with noises can not be concatenated. Only NoNoise is supported.')
+        if self.trend != other_signal.trend:
+            raise ValueError(f'Two signals with different trends can not be concatenated.')
+        return other_signal
+
+
+    def concatenate(self, other_change_signal: typing.Self,
+                    trend_transition: typing.Optional[base.BaseTransition] = None,
+                    oscillation_transition: typing.Optional[base.BaseTransition] = None) -> typing.Self:
+        """
+        This function concatenates a change signal to another. It makes a copy of both.
+        :param other_change_signal: the other signal to concatenate
+        :param trend_transition: a trend transition between the concatenated signals
+        :param oscillation_transition: an oscillation transition between the concatenated signals
+        :return: The newly concatenated change signal.
+        """
+
+        # use our own "extend" function with a one element list
+        return self.extend([other_change_signal],
+                           trend_transition_list=[trend_transition],
+                           oscillation_transition_list=[oscillation_transition])
+
+    def extend(self, other_change_signal_list: list[typing.Self],
+               trend_transition_list: typing.Optional[list[base.BaseTransition]] = None,
+               oscillation_transition_list: typing.Optional[list[base.BaseTransition]] = None) -> typing.Self:
+        """
+        This function concatenates a list change signal to another. It makes a copy of all of them.
+        :param other_change_signal_list: a list of objects of class ChangeSignal
+        :param trend_transition_list: a trend transition between the concatenated signals
+        :param oscillation_transition_list: an oscillation transition between the concatenated signals
+        :return: The newly concatenated change signal.
+        """
+        # make a copy of all the signals (including the self signal)
+        other_signal_list = [self.copy()]
+        other_signal_list.extend(self._check_and_copy_other_signal(other_signal)
+                                 for other_signal in other_change_signal_list)
+
+        # check whether we received a list of oscillation transitions
+        if oscillation_transition_list is None:
+            oscillation_transition_list = [None]*len(other_signal_list)
+        else:
+            if len(oscillation_transition_list) != len(other_signal_list)-1:
+                raise ValueError(f'There are not enough oscillation transitions. There are {len(oscillation_transition_list)} oscillation transitions but {len(other_signal_list)-1} signals to extend.')
+
+        # check whether we received a list of trend transitions
+        if trend_transition_list is None:
+            trend_transition_list = [None]*len(other_signal_list)
+        else:
+            if len(trend_transition_list) != len(other_signal_list)-1:
+                raise ValueError(f'There are not enough trend transitions. There are {len(oscillation_transition_list)} trend transitions but {len(other_signal_list)-1} signals to extend.')
+
+        for idx, (prev_signal, curr_signal, oscillation_transition, trend_transition) in enumerate(zip(other_signal_list, other_signal_list[1:], oscillation_transition_list, trend_transition_list)):
+
+            # add a transition between the two oscillations
+            if oscillation_transition is None:
+                # default is no transition
+                oscillation_transition = transitions.NoTransition(prev_signal.signals[-1].oscillation,
+                                                                  curr_signal.signals[0].oscillation)
+            elif isinstance(oscillation_transition, base.BaseTransition):
+                oscillation_transition.register_from_to_objects(prev_signal.signals[-1].oscillation,
+                                                                curr_signal.signals[0].oscillation)
+            else:
+                raise ValueError(f'oscillation_transition_list[{idx=}] must be of type BaseTransition. Currently {type(oscillation_transition)}.')
+            # append the oscillation transition to the end of the previous transition
+            prev_signal.oscillation_transitions.append(oscillation_transition)
+
+            # add a transition between the two trends
+            if trend_transition is None:
+                # default is no transition
+                trend_transition = transitions.NoTransition(prev_signal.signals[-1].trend, curr_signal.signals[0].trend)
+            elif isinstance(trend_transition, base.BaseTransition):
+                trend_transition.register_from_to_objects(prev_signal.signals[-1].trend, curr_signal.signals[0].trend)
+            else:
+                raise ValueError(f'trend_transition_list[{idx=}] must be of type BaseTransition. Currently {type(trend_transition)}.')
+            # append the trend transition to the end of the previous transition
+            prev_signal.trend_transitions.append(trend_transition)
+
+        # take the first signal as the sentinel/seed/start
+        first_signal = other_signal_list[0]
+
+        # extend the transitions
+        first_signal.trend_transitions.extend(__trend_transition for __sig in other_signal_list[1:] for __trend_transition in __sig.trend_transitions)
+        first_signal.oscillation_transitions.extend(__oscillation_transition for __sig in other_signal_list[1:] for __oscillation_transition in __sig.oscillation_transitions)
+
+        # extend the size of the trend and of the noise
+        first_signal.trend.length = first_signal.trend.length + sum(other_signal.trend.length for other_signal in other_signal_list[1:])
+        first_signal.noise.length = first_signal.noise.length + sum(other_signal.noise.length for other_signal in other_signal_list[1:])
+
+        # extend the signal list
+        first_signal.signals.extend((__sig for __other_change_signal in other_signal_list[1:] for __sig in __other_change_signal.signals))
+        return first_signal
+
 
 
 class ChangeSignalMultivariate(base.SignalPartCollection):
