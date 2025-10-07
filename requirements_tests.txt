@@ -6,5 +6,8 @@ fbpca>=1.0
 stumpy>=1.11.1
 rocket-fft
 
+# to use typing.Self
+typing-extensions>=4.5; python_version < "3.11"
+
 # currently claspy only supports old versions of some of the packages. Therefore we exclude it for now.
 # claspy>=0.1.6

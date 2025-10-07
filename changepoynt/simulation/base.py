@@ -8,6 +8,12 @@ import json
 import os
 import warnings
 
+# for self type annotations
+try:  # Python 3.11+
+    from typing import Self
+except ImportError:  # Python 3.9–3.10
+    from typing_extensions import Self
+
 import numpy as np
 
 
@@ -704,7 +710,7 @@ class SignalPart(metaclass=SignalPartMeta):
         return {self.__class__.__name__: data}
 
     @classmethod
-    def from_json_dict(cls, parameter_dict: dict[str: typing.Any]) -> typing.Self:
+    def from_json_dict(cls, parameter_dict: dict[str: typing.Any]) -> Self:
 
         # get the classes that are registered as a signal part
         signal_part_constructors = SignalPart.get_registered_signal_parts()
@@ -777,10 +783,10 @@ class SignalPart(metaclass=SignalPartMeta):
         return parameter_json
 
     @classmethod
-    def from_json(cls, parameter_json: str) -> typing.Self:
+    def from_json(cls, parameter_json: str) -> Self:
         return cls.from_json_dict(json.loads(parameter_json))
 
-    def copy(self) -> typing.Self:
+    def copy(self) -> Self:
         """
         This function uses serialization to create a deep copy of an object.
         :return: The copy of the same type
@@ -1066,7 +1072,7 @@ class SignalPartCollection(metaclass=SignalPartCollectionMeta):
         return json.dumps(self.to_json_dict())
 
     @classmethod
-    def from_json(cls, parameter_json: str) -> typing.Self:
+    def from_json(cls, parameter_json: str) -> Self:
 
         # load the string into memory
         json_dict = json.loads(parameter_json)
@@ -1082,7 +1088,7 @@ class SignalPartCollection(metaclass=SignalPartCollectionMeta):
         # process the information
         return SignalPartCollection._registry[change_signal].from_json_dict(json_dict)
 
-    def copy(self) -> typing.Self:
+    def copy(self) -> Self:
         """
         This function uses serialization to create a deep copy of an object.
         :return: The copy of the same type

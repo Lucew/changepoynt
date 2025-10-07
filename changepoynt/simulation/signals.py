@@ -1,6 +1,11 @@
-import typing
 import itertools
-import json
+import typing
+
+# for self type annotations
+try:  # Python 3.11+
+    from typing import Self
+except ImportError:  # Python 3.9–3.10
+    from typing_extensions import Self
 
 import numpy as np
 
@@ -87,7 +92,7 @@ class Signal(base.SignalPartCollection):
         return f"{self.oscillation}\n{self.trend}\n{self.noise}"
 
     @classmethod
-    def from_dict(cls, params: dict[str: base.SignalPart]) -> typing.Self:
+    def from_dict(cls, params: dict[str: base.SignalPart]) -> Self:
         return cls(**params)
 
     def to_json_dict(self) -> dict[str: typing.Any]:
@@ -96,7 +101,7 @@ class Signal(base.SignalPartCollection):
                 }
 
     @classmethod
-    def from_json_dict(cls, parts_dict: dict[str: typing.Any]) -> typing.Self:
+    def from_json_dict(cls, parts_dict: dict[str: typing.Any]) -> Self:
 
         # check that we received the dict for a single signal
         parts_dict = cls.process_dict(parts_dict)
@@ -254,7 +259,7 @@ class ChangeSignal(base.SignalPartCollection):
         return {self.__class__.__name__: result_dict}
 
     @classmethod
-    def from_json_dict(cls, parts_dict: dict[str: typing.Any]) -> typing.Self:
+    def from_json_dict(cls, parts_dict: dict[str: typing.Any]) -> Self:
 
         # check that we received the dict for a single signal
         parts_dict = cls.process_dict(parts_dict)
@@ -294,7 +299,7 @@ class ChangeSignal(base.SignalPartCollection):
 
         return cls(**instantiated_parts_dict)
 
-    def _check_and_copy_other_signal(self, other_change_signal: typing.Self):
+    def _check_and_copy_other_signal(self, other_change_signal: Self):
 
         other_signal = other_change_signal.copy()
 
@@ -307,9 +312,9 @@ class ChangeSignal(base.SignalPartCollection):
         return other_signal
 
 
-    def concatenate(self, other_change_signal: typing.Self,
+    def concatenate(self, other_change_signal: Self,
                     trend_transition: typing.Optional[base.BaseTransition] = None,
-                    oscillation_transition: typing.Optional[base.BaseTransition] = None) -> typing.Self:
+                    oscillation_transition: typing.Optional[base.BaseTransition] = None) -> Self:
         """
         This function concatenates a change signal to another. It makes a copy of both.
         :param other_change_signal: the other signal to concatenate
@@ -323,9 +328,9 @@ class ChangeSignal(base.SignalPartCollection):
                            trend_transition_list=[trend_transition],
                            oscillation_transition_list=[oscillation_transition])
 
-    def extend(self, other_change_signal_list: list[typing.Self],
+    def extend(self, other_change_signal_list: list[Self],
                trend_transition_list: typing.Optional[list[base.BaseTransition]] = None,
-               oscillation_transition_list: typing.Optional[list[base.BaseTransition]] = None) -> typing.Self:
+               oscillation_transition_list: typing.Optional[list[base.BaseTransition]] = None) -> Self:
         """
         This function concatenates a list change signal to another. It makes a copy of all of them.
         :param other_change_signal_list: a list of objects of class ChangeSignal
@@ -436,7 +441,7 @@ class ChangeSignalMultivariate(base.SignalPartCollection):
         return {self.__class__.__name__: result_dict}
 
     @classmethod
-    def from_json_dict(cls, parts_dict: dict[str: typing.Any]) -> typing.Self:
+    def from_json_dict(cls, parts_dict: dict[str: typing.Any]) -> Self:
 
         # check that we received the dict for a single signal
         parts_dict = cls.process_dict(parts_dict)
