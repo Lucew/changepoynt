@@ -127,6 +127,7 @@ class TestSimulation:
         # make a copy of the signal
         signal_copy = signal.copy()
         print(signal)
+        print(signal_copy)
 
         # check for equality
         assert signal == signal_copy
