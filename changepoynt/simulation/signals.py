@@ -25,6 +25,7 @@ class Signal(base.SignalPartCollection):
 
         if len(oscillation.shape) != 1:
             raise AttributeError(f"Oscillation has to be a 1D array. Currently: {len(oscillation.shape)}.")
+        self.verbose = False
 
         # create the defaults if necessary
         if noise is None:
@@ -86,6 +87,12 @@ class Signal(base.SignalPartCollection):
             raise TypeError(f"Signals can only be compared to other Signals.")
 
         # compare the two oscillations for equality, they are equal if trend and oscillation are the same
+        if self.verbose and not (self.oscillation == other.oscillation and self.trend == other.trend):
+            print()
+            print('CMP Signal', self.oscillation == other.oscillation, self.trend == other.trend)
+            print(self.trend)
+            print(other.trend)
+            print()
         return self.oscillation == other.oscillation and self.trend == other.trend
 
     def __str__(self):
@@ -121,6 +128,7 @@ class ChangeSignal(base.SignalPartCollection):
                  trend_transition_list: list[typing.Union[base.BaseTransition, None]]= None,
                  general_trend: base.BaseTrend = None, general_noise: base.BaseNoise = None):
         super().__init__()
+        self.verbose = False
 
         # make default value for the transition_lists
         if oscillation_transition_list is None:
@@ -222,6 +230,13 @@ class ChangeSignal(base.SignalPartCollection):
         # compare the two oscillations for equality, they are equal if trend and oscillation are the same
         signal_equal = all(ele1 == ele2 for ele1, ele2 in zip(self.signals, other.signals))
         transitions_equal = all(ele1 == ele2 for ele1, ele2 in zip(self.trend_transitions, other.trend_transitions))
+
+        if self.verbose:
+            for idx, (ele1, ele2) in enumerate(zip(self.signals, other.signals)):
+                if ele1 != ele2:
+                    print('FALLLLLLLLLLLLLLLLSE', idx)
+                    print(ele1)
+                    print(ele2)
         noise_equal = self.noise == other.noise
         trend_equal = self.trend == other.trend
         return signal_equal and transitions_equal and noise_equal and trend_equal

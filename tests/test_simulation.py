@@ -12,13 +12,13 @@ import changepoynt.simulation.serialization as simser
 class TestSimulation:
     def setup_method(self):
         # make a random generator
-        randg = np.random.default_rng(42)
+        randg = np.random.default_rng(122)
 
         # make event generator
-        ceg = simgen.ChangeGenerator(length=1000, minimum_length=30, rate=0.01, random_generator=randg,verbose=False)
+        ceg = simgen.ChangeGenerator(length=1000, minimum_length=30, rate=0.011, random_generator=randg, verbose=False)
 
         # make signal generator
-        csg = simgen.ChangeSignalGenerator()
+        csg = simgen.ChangeSignalGenerator(random_generator=randg)
 
         # create the completely independent signals
         events = []
@@ -126,8 +126,6 @@ class TestSimulation:
 
         # make a copy of the signal
         signal_copy = signal.copy()
-        print(signal)
-        print(signal_copy)
 
         # check for equality
         assert signal == signal_copy
