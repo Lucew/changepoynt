@@ -422,6 +422,7 @@ class ChangeSignalMultivariate(base.SignalPartCollection):
 
     def __init__(self, signals: list[ChangeSignal], signal_names:list[str] = None):
         super().__init__()
+        self.verbose = False
 
         # check whether all signals have the same shape, we already checked whether they are one-dimensional
         # when constructing the ChangeSignal
@@ -430,14 +431,13 @@ class ChangeSignalMultivariate(base.SignalPartCollection):
 
         # check whether that the names have equal length to the signals if they are defined
         if signal_names is not None and len(signal_names) != len(signals):
-            raise ValueError(f"Signals must have the same length as signal_names. ")
+            raise ValueError(f"Signals must have the same length as signal_names.")
+        if signal_names is None:
+            signal_names = [f"Signal {idx}" for idx in range(len(signals))]
 
         # save the variables
         self.signals = signals
         self.signal_names = signal_names
-
-        # get the change points
-        self.change_points_list = [signal.changepoints for signal in signals]
 
     def render(self) -> np.ndarray:
         return np.stack([signal.render() for signal in self.signals], axis=0)
@@ -470,9 +470,36 @@ class ChangeSignalMultivariate(base.SignalPartCollection):
                 instantiated_parts_dict[key] = value
         return cls(**instantiated_parts_dict)
 
+    def __eq__(self, other):
+
+        # check the signals for equality
+        signals_equal = all(sig1 == sig2 for sig1, sig2 in zip(self.signals, other.signals))
+        names_equal = all(name1 == name2 for name1, name2 in zip(self.signal_names, other.signal_names))
+
+        # verbose equality check
+        if self.verbose:
+            for idx, (name1, name2, signal1, signal2) in enumerate(zip(self.signal_names, other.signal_names, self.signals, other.signals)):
+                if signal1 != signal2:
+                    print(f'ChangeSignals at index {idx} are not equal.')
+                    print(signal1)
+                    print(signal2)
+                if name1 != name2:
+                    print(f'Names at index {idx} are not equal.')
+                    print(name1, name2)
+        return signals_equal and names_equal
+
+    def to_array_dict(self):
+        return {name: signal.render() for name, signal in zip(self.signal_names, self.signals)}
+
+    def get_signals(self, idx: int) -> list[ChangeSignal]:
+        return self.signals
+
+    def get_names(self):
+        return self.signal_names
+
     @property
     def changepoints(self) -> list[list[int]]:
-        return self.change_points_list
+        return [signal.changepoints for signal in self.signals]
 
 
 if __name__ == "__main__":

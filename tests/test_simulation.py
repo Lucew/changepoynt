@@ -103,7 +103,6 @@ class TestSimulation:
         # serialize and deserialize the signal
         signal_str = simser.to_json(signal)
         assert type(signal_str) == str
-        print(type(signal_str))
         new_signal = simser.from_json(signal_str)
 
         # compare them for equality
@@ -135,6 +134,24 @@ class TestSimulation:
 
         # check whether they are the same object
         assert not signal is signal_copy
+
+    def test_multivariate_copy(self):
+
+        # get a signal from the setup
+        multi_signal = simsig.ChangeSignalMultivariate(self.signals)
+
+        # make a copy of the signal
+        multi_signal_copy = multi_signal.copy()
+
+        # check for equality
+        assert multi_signal == multi_signal_copy
+
+        # compare their renders for equality
+        np.testing.assert_array_equal(multi_signal.render(), multi_signal_copy.render())
+
+        # check whether they are the same object
+        assert not multi_signal is multi_signal_copy
+
 
     def test_concatenate(self):
 
