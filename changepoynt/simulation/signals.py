@@ -1,6 +1,8 @@
 import itertools
 import typing
 
+from changepoynt.simulation.base import SignalPartCollection
+
 # for self type annotations
 try:  # Python 3.11+
     from typing import Self
@@ -117,6 +119,195 @@ class Signal(base.SignalPartCollection):
         instantiated_parts_dict = {part_type: base.SignalPart.from_json_dict(part_dict)
                                    for part_type, part_dict in parts_dict.items()}
         return cls.from_dict(instantiated_parts_dict)
+
+
+class ChangePoint(SignalPartCollection):
+
+    def __init__(self, from_signal: Signal, to_signal: Signal,
+                 oscillation_transition: base.BaseTransition,
+                 trend_transition: base.BaseTransition,
+                 global_position: typing.Optional[int] = None,
+                 general_trend: typing.Optional[base.BaseTrend] = None,
+                 general_noise: typing.Optional[base.BaseNoise] = None):
+        super().__init__()
+
+        # check the signals
+        if not isinstance(from_signal, Signal):
+            raise TypeError(f"{type(from_signal)=} needs to be a {Signal}.")
+        if not isinstance(to_signal, Signal):
+            raise TypeError(f"{type(to_signal)=} needs to be a {Signal}.")
+
+        # check and handle the two transitions
+        self.__handle_transitions(oscillation_transition, trend_transition, from_signal, to_signal)
+
+        # if not global position is defined set it to the start of the to object (second signal)
+        if global_position is None:
+            global_position = trend_transition.from_object.shape[0]
+
+        # check the type of the global position
+        if not isinstance(global_position, int):
+            raise TypeError(f"{type(global_position)=} must be {int}.")
+
+        # check that we need to have a global position if general noise or trend are not none
+        any_global_specified = (not general_trend is None or not general_noise is None)
+        if any_global_specified and (global_position is None):
+            raise ValueError(f"If you specify general_trend or general_noise, we also need a global position.")
+
+        # check that the global position is within the general_trend or noise
+        if general_trend is not None:
+            if global_position >= general_trend.shape[0]:
+                raise ValueError(f"{global_position=} has to be smaller than {general_trend.shape[0]=}.")
+        if general_noise is not None:
+            if global_position >= general_noise.shape[0]:
+                raise ValueError(f"{global_position=} has to be smaller than {general_noise.shape[0]=}.")
+
+        # save the signals
+        self.from_signal = from_signal
+        self.to_signal = to_signal
+        self.global_position = global_position
+        self.oscillation_transition = oscillation_transition
+        self.trend_transition = trend_transition
+        self.general_trend = general_trend
+        self.general_noise = general_noise
+
+    @staticmethod
+    def __check_transition(transition: base.BaseTransition):
+        # check whether the input is indeed a transition, and from and to object are registered
+        if not isinstance(transition, base.BaseTransition):
+            raise TypeError(f"{type(transition)=} must be {base.BaseTransition}.")
+
+        # check that the transition has registered objects
+        if not transition.has_registered_objects():
+            raise ValueError(f"Input signal_transition must have registered objects.")
+
+    def __handle_transitions(self, oscillation_transition, trend_transition, from_signal: Signal, to_signal: Signal):
+
+        # check both the transitions
+        self.__check_transition(oscillation_transition)
+        self.__check_transition(trend_transition)
+
+        # check the oscillation transition
+        if oscillation_transition.from_object != from_signal.oscillation:
+            raise ValueError(f'oscillation_transition.from_object does not match the from_signal.oscillation.')
+        if oscillation_transition.to_object != to_signal.oscillation:
+            raise ValueError(f'oscillation_transition.to_object does not match the to_signal.oscillation.')
+
+        # check the trend transition
+        if trend_transition.from_object != from_signal.trend:
+            raise ValueError(f'trend_transition.from_object does not match the from_signal.trend.')
+        if trend_transition.to_object != to_signal.trend:
+            raise ValueError(f'trend_transition.to_object does not match the to_signal.trend.')
+
+    def render(self) -> np.ndarray:
+
+        # render the transition itself by creating a ChangeSignal from it
+        signal = ChangeSignal([self.from_signal, self.to_signal],
+                              oscillation_transition_list=[self.oscillation_transition],
+                              trend_transition_list=[self.trend_transition])
+
+        # render the signal
+        rendered_array = signal.render()
+
+        # add the general noise and trend
+        start_idx = self.global_position-self.from_signal.shape[0]
+        end_idx = self.global_position+self.to_signal.shape[0]
+        general_noise = self.general_noise.render()[start_idx:end_idx]
+        general_trend = self.general_trend.render()[start_idx:end_idx]
+        return rendered_array + general_noise + general_trend
+
+    def __eq__(self, other):
+
+        # compare the signals
+        from_signals_equal = self.from_signal == other.from_signal
+        to_signals_equal = self.to_signal == other.to_signal
+        signal_equal = from_signals_equal and to_signals_equal
+
+        # compare the transitions
+        trend_transition_equal = self.trend_transition == other.trend_transition
+        oscillation_transition_equal = self.oscillation_transition == other.oscillation_transition
+        transitions_equal = trend_transition_equal and oscillation_transition_equal
+
+        # compare the general noise and trend
+        general_noise_equal = self.general_noise == other.general_noise
+        general_trend_equal = self.general_trend == other.general_trend
+        general_equal = general_noise_equal and general_trend_equal
+
+        # compare the global position
+        position_equal = self.global_position == other.global_position
+        return signal_equal and transitions_equal and general_equal and position_equal
+
+    def to_json_dict(self) -> dict[str: typing.Any]:
+
+        # copy the transitions so we do not alter our own transitions
+        oscillation_transition = self.oscillation_transition.copy()
+        trend_transition = self.trend_transition.copy()
+
+        # deregister the signals from the copies so we do not save them multiple times
+        oscillation_transition.deregister_objects()
+        trend_transition.deregister_objects()
+
+        # initialize the dict
+        general_trend_json = self.general_trend.to_json_dict() if self.general_trend is not None else None
+        general_noise_json = self.general_noise.to_json_dict() if self.general_noise is not None else None
+        information_dict = {'from_signal': self.from_signal.to_json_dict(),
+                            'to_signal': self.to_signal.to_json_dict(),
+                            'oscillation_transition': oscillation_transition.to_json_dict(),
+                            'trend_transition': trend_transition.to_json_dict(),
+                            'global_position': self.global_position,
+                            'general_trend': general_trend_json,
+                            'general_noise': general_noise_json,}
+
+        return {self.__class__.__name__: information_dict}
+
+    @classmethod
+    def from_json_dict(cls, parts_dict: dict[str: typing.Any]) -> Self:
+
+        # check that we received the dict for a single signal
+        parts_dict = cls.process_dict(parts_dict)
+
+        # instantiate the from and to signal
+        from_signal = Signal.from_json_dict(parts_dict['from_signal'])
+        to_signal = Signal.from_json_dict(parts_dict['to_signal'])
+
+        # instantiate the transitions
+        oscillation_transition = base.SignalPart.from_json_dict(parts_dict['oscillation_transition'])
+        trend_transition = base.SignalPart.from_json_dict(parts_dict['trend_transition'])
+
+        # register the from and to signals
+        oscillation_transition.register_from_to_objects(from_signal.oscillation, to_signal.oscillation)
+        trend_transition.register_from_to_objects(from_signal.trend, to_signal.trend)
+
+        # instantiate the general noise and general trend
+        if parts_dict['general_trend'] is not None:
+            general_trend = base.SignalPart.from_json_dict(parts_dict['general_trend'])
+        else:
+            general_trend = None
+        if parts_dict['general_noise'] is not None:
+            general_noise = base.SignalPart.from_json_dict(parts_dict['general_noise'])
+        else:
+            general_noise = None
+
+        # extract the global position
+        global_position = parts_dict['global_position']
+
+        # instantiate the parts using the common base class (where each class is registered)
+        instantiated_parts_dict = {'from_signal' : from_signal,
+                                   'to_signal' : to_signal,
+                                   'oscillation_transition': oscillation_transition,
+                                   'trend_transition': trend_transition,
+                                   'global_position': global_position,
+                                   'general_trend': general_trend,
+                                   'general_noise': general_noise}
+        return cls(**instantiated_parts_dict)
+
+    def local_interval(self) -> tuple[int, int, int]:
+        max_transition_length = max(self.oscillation_transition.transition_length, self.trend_transition.transition_length)
+        local_position = self.from_signal.shape[0]
+        return local_position-max_transition_length, local_position, local_position+max_transition_length
+
+    def global_interval(self) -> tuple[int, int, int]:
+        max_transition_length = max(self.oscillation_transition.transition_length, self.trend_transition.transition_length)
+        return self.global_position-max_transition_length, self.global_position, self.global_position+max_transition_length
 
 
 class ChangeSignal(base.SignalPartCollection):
@@ -256,11 +447,22 @@ class ChangeSignal(base.SignalPartCollection):
             output.append('')
         return '\n'.join(output)
 
-    @property
-    def changepoints(self) -> list[int]:
+    def get_change_points(self) -> list[ChangePoint,]:
+        """
+        The discrete changepoint is always an index to the first sample of the signal.
+        This function returns the change points as an interval (with the transition length)
+        :return: list of change point intervals in the form (transition start, changepoint, transition end)
+        """
 
-        # go through the signals and collect their length
-        return list(itertools.accumulate(signal.shape[0] for signal in self.signals))
+        # go through the signals and accumulate their length
+        # if you would use this as an index, it would index the first sample of the new signal
+        change_idx = list(itertools.accumulate(signal.shape[0] for signal in self.signals))
+
+        # go through the transitions and the change points to adapt their intervals
+        change_intervals = []
+        for global_position, from_signal, to_signal, oscillation_transition, trend_transition in zip(change_idx, self.signals, self.signals[1:], self.oscillation_transitions, self.trend_transitions):
+            change_intervals.append(ChangePoint(from_signal, to_signal, oscillation_transition, trend_transition, global_position, self.trend, self.noise))
+        return change_intervals
 
     def to_json_dict(self) -> dict[str: typing.Any]:
 
@@ -497,9 +699,8 @@ class ChangeSignalMultivariate(base.SignalPartCollection):
     def get_names(self):
         return self.signal_names
 
-    @property
-    def changepoints(self) -> list[list[int]]:
-        return [signal.changepoints for signal in self.signals]
+    def get_change_points(self) -> list[list[ChangePoint]]:
+        return [signal.get_change_points() for signal in self.signals]
 
 
 if __name__ == "__main__":

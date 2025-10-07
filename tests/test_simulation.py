@@ -7,6 +7,8 @@ import changepoynt.simulation.randomizers as rds
 import changepoynt.simulation.generator as simgen
 import changepoynt.simulation.signals as simsig
 import changepoynt.simulation.serialization as simser
+import changepoynt.simulation.trends as simtrend
+import changepoynt.simulation.noises as simnoise
 
 
 class TestSimulation:
@@ -78,16 +80,15 @@ class TestSimulation:
     def test_json_serialization(self):
 
         # get a signal from the setup
-        signal = self.signals[0]
+        for signal in self.signals:
+            # serialize the signal
+            signal_str = signal.to_json()
 
-        # serialize the signal
-        signal_str = signal.to_json()
+            # deserialize again
+            new_signal = simsig.ChangeSignal.from_json(signal_str)
 
-        # deserialize again
-        new_signal = simsig.ChangeSignal.from_json(signal_str)
-
-        # compare them for equality
-        np.testing.assert_array_equal(signal.render(), new_signal.render())
+            # compare them for equality
+            np.testing.assert_array_equal(signal.render(), new_signal.render())
 
         # create a multivariate change point signal
         multisig = simsig.ChangeSignalMultivariate(self.signals, [str(idx) for idx,_ in enumerate(self.signals)])
@@ -98,15 +99,14 @@ class TestSimulation:
     def test_json_generic_serialization(self):
 
         # get a signal from the setup
-        signal = self.signals[0]
+        for signal in self.signals:
+            # serialize and deserialize the signal
+            signal_str = simser.to_json(signal)
+            assert type(signal_str) == str
+            new_signal = simser.from_json(signal_str)
 
-        # serialize and deserialize the signal
-        signal_str = simser.to_json(signal)
-        assert type(signal_str) == str
-        new_signal = simser.from_json(signal_str)
-
-        # compare them for equality
-        np.testing.assert_array_equal(signal.render(), new_signal.render())
+            # compare them for equality
+            np.testing.assert_array_equal(signal.render(), new_signal.render())
 
         # create a multivariate change point signal
         multisig = simsig.ChangeSignalMultivariate(self.signals, [str(idx) for idx,_ in enumerate(self.signals)])
@@ -121,19 +121,19 @@ class TestSimulation:
     def test_copy(self):
 
         # get a signal from the setup
-        signal = self.signals[0]
+        for signal in self.signals:
 
-        # make a copy of the signal
-        signal_copy = signal.copy()
+            # make a copy of the signal
+            signal_copy = signal.copy()
 
-        # check for equality
-        assert signal == signal_copy
+            # check for equality
+            assert signal == signal_copy
 
-        # compare their renders for equality
-        np.testing.assert_array_equal(signal.render(), signal_copy.render())
+            # compare their renders for equality
+            np.testing.assert_array_equal(signal.render(), signal_copy.render())
 
-        # check whether they are the same object
-        assert not signal is signal_copy
+            # check whether they are the same object
+            assert not signal is signal_copy
 
     def test_multivariate_copy(self):
 
@@ -156,22 +156,21 @@ class TestSimulation:
     def test_concatenate(self):
 
         # get a signal from the setup
-        signal = self.signals[0]
-        signal2 = self.signals[1]
+        for signal, signal2 in zip(self.signals, self.signals[1:]):
 
-        # concatenate the signals
-        signal_concat = signal.concatenate(signal2)
+            # concatenate the signals
+            signal_concat = signal.concatenate(signal2)
 
-        # serialize the concatenated signal
-        signal_concat_copy = signal_concat.copy()
+            # serialize the concatenated signal
+            signal_concat_copy = signal_concat.copy()
 
-        # check for equality of the concatenated signals with the original signals
-        np.testing.assert_array_equal(signal_concat.render(), np.concatenate((signal.render(), signal2.render())))
+            # check for equality of the concatenated signals with the original signals
+            np.testing.assert_array_equal(signal_concat.render(), np.concatenate((signal.render(), signal2.render())))
 
-        # check whether serialization still works
-        signal_concat.render()
-        signal_concat_copy.render()
-        np.testing.assert_array_equal(signal_concat.render(), signal_concat_copy.render())
+            # check whether serialization still works
+            signal_concat.render()
+            signal_concat_copy.render()
+            np.testing.assert_array_equal(signal_concat.render(), signal_concat_copy.render())
 
     def test_extend(self):
 
@@ -192,6 +191,57 @@ class TestSimulation:
         signal_concat_copy = signal_concat.copy()
         signal_concat_copy.render()
         np.testing.assert_array_equal(signal_concat.render(), signal_concat_copy.render())
+
+    def test_changepoint_copy(self):
+
+        # extract the change points
+        for signal in self.signals:
+            for changepoint in signal.get_change_points():
+
+                # make a copy
+                changepoint_copy = changepoint.copy()
+
+                # check whether they are equal
+                assert changepoint_copy == changepoint
+
+                # check whether the render is equal
+                np.testing.assert_array_equal(changepoint_copy.render(), changepoint.render())
+
+    def test_changepoint_render_against_change_signal(self):
+
+        # go through the signals
+        for signal in self.signals:
+
+            # create some additional noise and trend
+            test_trend = simtrend.LinearTrend(length=signal.shape[0], offset=10.0, slope=120.0)
+            test_noise = simnoise.GaussianNoise(length=signal.shape[0], std=1000, seed=42)
+
+            # copy the signal so we do not make the modifications globally
+            signal = signal.copy()
+            signal.trend = test_trend
+            signal.noise = test_noise
+
+            # get the change points from the signal
+            change_points = signal.get_change_points()
+
+            # render the complete signal
+            signal_array = signal.render()
+
+            # go through the change points and render them and compare them to the signal
+            for point in change_points:
+
+                # render the change point
+                point_array = point.render()
+
+                # get the positions
+                local_start, _, local_end = point.local_interval()
+                global_start, _, global_end = point.global_interval()
+
+                # compare the arrays
+                np.testing.assert_array_almost_equal(point_array[local_start:local_end], signal_array[global_start:global_end])
+
+
+
 
     def test_all_oscillations_implementations(self):
         pass

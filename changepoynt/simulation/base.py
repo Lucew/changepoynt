@@ -704,13 +704,17 @@ class SignalPart(metaclass=SignalPartMeta):
 
         # check whether the current object is a transition. than we have to serialize the from and to object as well
         if isinstance(self, BaseTransition):
-            data['from_object'] = self.from_object.to_json_dict()
-            data['to_object'] = self.to_object.to_json_dict()
+            data['from_object'] = self.from_object.to_json_dict() if self.from_object is not None else None
+            data['to_object'] = self.to_object.to_json_dict() if self.to_object is not None else None
 
         return {self.__class__.__name__: data}
 
     @classmethod
     def from_json_dict(cls, parameter_dict: dict[str: typing.Any]) -> Self:
+
+        # check for None
+        if parameter_dict is None:
+            return None
 
         # get the classes that are registered as a signal part
         signal_part_constructors = SignalPart.get_registered_signal_parts()
@@ -880,6 +884,9 @@ class BaseTransition(SignalPart):
         # register the from and to objects if they are existing
         self.register_from_to_objects(from_object, to_object)
 
+    def has_registered_objects(self):
+        return self.__objects_registered
+
     def register_from_to_objects(self, from_object: typing.Optional[SignalPart], to_object: typing.Optional[SignalPart]):
 
         # check whether both are None. in this case we ignore
@@ -933,6 +940,12 @@ class BaseTransition(SignalPart):
 
         # mark that we have registered the elements
         self.__objects_registered = True
+
+    def deregister_objects(self):
+        self.from_object = None
+        self.to_object = None
+        self.__objects_registered = False
+        self.transition_length = None
 
     @abc.abstractmethod
     def get_transition_values(self) -> np.ndarray:
@@ -1047,6 +1060,10 @@ class SignalPartCollection(metaclass=SignalPartCollectionMeta):
         pass
 
     @abc.abstractmethod
+    def render(self) -> np.ndarray:
+        pass
+
+    @abc.abstractmethod
     def to_json_dict(self):
         raise NotImplementedError
 
@@ -1073,6 +1090,10 @@ class SignalPartCollection(metaclass=SignalPartCollectionMeta):
 
     @classmethod
     def from_json(cls, parameter_json: str) -> Self:
+
+        # check for None
+        if parameter_json is None:
+            return None
 
         # load the string into memory
         json_dict = json.loads(parameter_json)
