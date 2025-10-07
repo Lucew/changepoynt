@@ -880,7 +880,7 @@ class BaseTransition(SignalPart):
         # register the from and to objects if they are existing
         self.register_from_to_objects(from_object, to_object)
 
-    def register_from_to_objects(self, from_object: [SignalPart | None], to_object: [SignalPart | None]):
+    def register_from_to_objects(self, from_object: typing.Optional[SignalPart], to_object: typing.Optional[SignalPart]):
 
         # check whether both are None. in this case we ignore
         if from_object is None and to_object is None:
