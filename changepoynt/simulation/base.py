@@ -1,4 +1,3 @@
-import gzip
 import typing
 import abc
 import inspect
@@ -8,8 +7,6 @@ import collections
 import json
 import os
 import warnings
-
-from numpy.lib.function_base import iterable
 
 # for self type annotations
 try:  # Python 3.11+
