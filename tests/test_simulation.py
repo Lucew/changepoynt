@@ -118,6 +118,47 @@ class TestSimulation:
         # check whether it is still the same signal
         np.testing.assert_array_equal(multisig.render(), new_multisig.render())
 
+    def test_json_serialization(self):
+
+        # get a signal from the setup
+        for signal in self.signals:
+            # serialize the signal
+            signal_str = signal.to_json(compress=True)
+
+            # deserialize again
+            new_signal = simsig.ChangeSignal.from_json(signal_str)
+
+            # compare them for equality
+            np.testing.assert_array_equal(signal.render(), new_signal.render())
+
+        # create a multivariate change point signal
+        multisig = simsig.ChangeSignalMultivariate(self.signals, [str(idx) for idx,_ in enumerate(self.signals)])
+        json_str = multisig.to_json(compress=True)
+        new_multisig = simsig.ChangeSignalMultivariate.from_json(json_str)
+        np.testing.assert_array_equal(multisig.render(), new_multisig.render())
+
+    def test_json_generic_serialization(self):
+
+        # get a signal from the setup
+        for signal in self.signals:
+            # serialize and deserialize the signal
+            signal_str = simser.to_json(signal, compress=True)
+            assert type(signal_str) == str
+            new_signal = simser.from_json(signal_str)
+
+            # compare them for equality
+            np.testing.assert_array_equal(signal.render(), new_signal.render())
+
+        # create a multivariate change point signal
+        multisig = simsig.ChangeSignalMultivariate(self.signals, [str(idx) for idx, _ in enumerate(self.signals)])
+
+        # serialize and deserialize
+        json_str = simser.to_json(multisig, compress=True)
+        new_multisig = simser.from_json(json_str)
+
+        # check whether it is still the same signal
+        np.testing.assert_array_equal(multisig.render(), new_multisig.render())
+
     def test_copy(self):
 
         # get a signal from the setup

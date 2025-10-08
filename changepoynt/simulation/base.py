@@ -1,3 +1,4 @@
+import gzip
 import typing
 import abc
 import inspect
@@ -7,6 +8,8 @@ import collections
 import json
 import os
 import warnings
+
+from numpy.lib.function_base import iterable
 
 # for self type annotations
 try:  # Python 3.11+
@@ -777,18 +780,29 @@ class SignalPart(metaclass=SignalPartMeta):
             return_str.append(f"\t{paramname} = {getattr(self,paramname)}")
         return "\n".join(return_str)
 
-    def to_json(self) -> str:
+    def to_json(self, compress: bool = False) -> str:
 
         # get the parameters of the signal part in a dictionary
         parameter_dict = self.to_json_dict()
 
         # transform the dictionary into a json
         parameter_json = json.dumps(parameter_dict)
+
+        # compress if necessary
+        if compress:
+            parameter_json = compress_json_dict(parameter_json)
         return parameter_json
 
     @classmethod
     def from_json(cls, parameter_json: str) -> Self:
-        return cls.from_json_dict(json.loads(parameter_json))
+
+        # load the json into a dict
+        json_dict = json.loads(parameter_json)
+
+        # decompress if compressed
+        json_dict = decompress_compressed_json(json_dict)
+
+        return cls.from_json_dict(json_dict)
 
     def copy(self) -> Self:
         """
@@ -1085,8 +1099,15 @@ class SignalPartCollection(metaclass=SignalPartCollectionMeta):
     def get_registered_signal_parts(cls):
         return cls._registry
 
-    def to_json(self) -> str:
-        return json.dumps(self.to_json_dict())
+    def to_json(self, compress: bool = False) -> str:
+
+        # get the json dict
+        json_dict = self.to_json_dict()
+
+        # make the compression
+        if compress:
+            json_dict = compress_json_dict(json_dict)
+        return json.dumps(json_dict)
 
     @classmethod
     def from_json(cls, parameter_json: str) -> Self:
@@ -1097,6 +1118,9 @@ class SignalPartCollection(metaclass=SignalPartCollectionMeta):
 
         # load the string into memory
         json_dict = json.loads(parameter_json)
+
+        # decompress if compressed
+        json_dict = decompress_compressed_json(json_dict)
 
         # check that we received the dict for a single signal
         assert len(json_dict) == 1, 'The dict contains more than one object.'
@@ -1122,6 +1146,119 @@ class SignalPartCollection(metaclass=SignalPartCollectionMeta):
         copy_object = SignalPartCollection.from_json(json_str)
 
         return copy_object
+
+
+def count_keys(json_dict: dict[str: typing.Any]):
+
+    # make a stack for the dicts
+    stack = [iter(json_dict.items())]
+    counter = collections.defaultdict(int)
+
+    # go through the current dictionary
+    while stack:
+
+        # get the next element from the iterator
+        try:
+            next_key, next_ele = next(stack[-1])
+
+        # in case there is no next element, we can pop the iterator from the stack and continue
+        except StopIteration:
+            stack.pop()
+            continue
+
+        # register the key
+        if next_key is not None:
+            counter[next_key] += 1
+
+        # check the next element if it is a list or a tuple
+        if isinstance(next_ele, dict):
+            stack.append(iter(next_ele.items()))
+        if isinstance(next_ele, list) or isinstance(next_ele, tuple):
+            stack.append(zip((None for _ in range(len(next_ele))),next_ele))
+    return counter
+
+
+def rename_dict_keys(dict_to_rename: dict[str: typing.Any], translation_dict: dict[str: str]):
+
+    # check the translation dict
+    assert len(set(translation_dict.values())) == len(translation_dict.keys()), 'The translation_dict contains duplicate values.'
+
+    # go through the dict using a stack
+    upper_dict_sentinel = {'key': dict_to_rename}
+    stack = [(upper_dict_sentinel, 'key', dict_to_rename)]
+
+    # work through the stack
+    while stack:
+
+        # get the most recent element from the stack
+        upper_dict, key_name, curr_dict = stack.pop()
+
+        # translate all the keys
+        curr_dict = {translation_dict[key]: value for key, value in curr_dict.items()}
+
+        # place the dict into the upper dict
+        upper_dict[key_name] = curr_dict
+
+        # go through the dict and check for other dicts
+        for key, val in curr_dict.items():
+            if isinstance(val, dict):
+                stack.append((curr_dict, key, val))
+            elif isinstance(val, list):
+                stack.extend((val, idx, new_dict) for idx, new_dict in enumerate(val) if isinstance(new_dict, dict))
+            elif isinstance(val, collections.abc.Iterable):
+                raise TypeError(f'The dict contains an iterable ({type(val)}) that is not a list or a dict.')
+    return upper_dict_sentinel['key']
+
+
+def create_translation_dict(key_count_dict: dict[str: int]):
+
+    # get the tuples and sort them
+    sorted_name_tuples = sorted(key_count_dict.items(), key=lambda x: x[1], reverse=True)
+
+    # make the naming dict
+    translation_dict = {name: idx for idx, (name, _) in enumerate(sorted_name_tuples)}
+
+    # check the translation dict
+    assert len(set(translation_dict.values())) == len(translation_dict.keys()), 'The translation_dict contains duplicate values.'
+    return translation_dict
+
+
+def compress_json_dict(json_dict: dict[str: typing.Any]):
+
+    # check the keys of the dictionary
+    key_counter = count_keys(json_dict)
+
+    # make the translation dict
+    translation_dict = create_translation_dict(key_counter)
+
+    # compress the json
+    json_dict = rename_dict_keys(json_dict, translation_dict)
+
+    # invert the translation dict
+    # check the translation dict
+    assert len(set(translation_dict.values())) == len(translation_dict.keys()), 'The translation_dict contains duplicate values.'
+    translation_dict_reverse = {value: key for key, value in translation_dict.items()}
+
+    # wrap the dictionary into the compression
+    compressed_dict = {'translation': translation_dict_reverse, 'payload': json_dict}
+    return compressed_dict
+
+
+def decompress_compressed_json(compressed_json_dict: dict):
+
+    # check that we have translation and payload
+    if len(compressed_json_dict) != 2 or not 'payload' in compressed_json_dict or not 'translation' in compressed_json_dict:
+        return compressed_json_dict
+
+    # get the important elements
+    translation_dict = compressed_json_dict['translation']
+    json_dict= compressed_json_dict['payload']
+
+    # decompress the json dict
+    json_dict = rename_dict_keys(json_dict, translation_dict)
+    return json_dict
+
+
 
 
 if __name__ == "__main__":

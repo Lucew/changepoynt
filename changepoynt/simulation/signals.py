@@ -625,6 +625,7 @@ class ChangeSignalMultivariate(base.SignalPartCollection):
     def __init__(self, signals: list[ChangeSignal], signal_names:list[str] = None):
         super().__init__()
         self.verbose = False
+        self.had_names = True
 
         # check whether all signals have the same shape, we already checked whether they are one-dimensional
         # when constructing the ChangeSignal
@@ -635,7 +636,8 @@ class ChangeSignalMultivariate(base.SignalPartCollection):
         if signal_names is not None and len(signal_names) != len(signals):
             raise ValueError(f"Signals must have the same length as signal_names.")
         if signal_names is None:
-            signal_names = [f"Signal {idx}" for idx in range(len(signals))]
+            self.had_names = False
+            signal_names = [f'Signal {idx}' for idx in range(len(signals))]
 
         # save the variables
         self.signals = signals
@@ -652,7 +654,7 @@ class ChangeSignalMultivariate(base.SignalPartCollection):
 
         # initialize the dict
         result_dict = {'signals': [signal.to_json_dict() for signal in self.signals],
-                       'signal_names': self.signal_names}
+                       'signal_names': self.signal_names if self.had_names else None}
 
         # make the signal list
         return {self.__class__.__name__: result_dict}
