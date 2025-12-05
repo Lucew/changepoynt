@@ -16,5 +16,5 @@ python -m build
 # if the pipeline has been successful and the package is published on PyPi
 # add a tag to the current commit in the form: vX.X.X (e.g., v0.1.0) to mark the version
 
-# then do a release on Github with title "Published Version X.X.X" (e.g., Published Version 0.1.0)
-# ann put the release notes in the description
+# then do a release on GitHub with title "Published Version X.X.X" (e.g., Published Version 0.1.0)
+# and put the release notes in the description
