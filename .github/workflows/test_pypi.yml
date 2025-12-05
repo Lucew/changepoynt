@@ -6,6 +6,8 @@ on:
     # https://github.com/orgs/community/discussions/25615
     tags-ignore:
       - '**'
+    branches:
+      - '**'
     paths:
       - 'changepoynt/**'
       - 'tests/**'
