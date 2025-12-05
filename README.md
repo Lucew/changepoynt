@@ -125,19 +125,19 @@ Find the [FAQs](https://github.com/Lucew/changepoynt/blob/master/docs/FAQ.md) in
 We are actively working on the package. Therefore, some algorithms are already available, while others
 are currently under development. An overview with sources can be seen here:
 
-| Algorithm | Source                                                                            | Status                     |
-|-----------|-----------------------------------------------------------------------------------|----------------------------|
-| SST       | [Idé](https://epubs.siam.org/doi/abs/10.1137/1.9781611972757.63)                  | Stable  :heavy_check_mark: |
-| IKA-SST   | [Idé](https://epubs.siam.org/doi/abs/10.1137/1.9781611972771.54)                  | Stable  :heavy_check_mark: |
-| ESST      | [Boelter & Weber et al.](https://ntrs.nasa.gov/citations/20250002705) | Stable :heavy_check_mark:  |
-| RuLSIF    | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270) | Stable  :heavy_check_mark: |
-| uLSIF     | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270) | Stable  :heavy_check_mark: |
-| KLIEP     | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270) | Planned                    |
-| ClaSP     | [Ermshaus et al.](https://link.springer.com/article/10.1007/s10618-023-00923-x)   | Deactivated :x:            |
-| FLUSS     | [Gharghabi et al.](https://ieeexplore.ieee.org/abstract/document/8215484)         | Stable :heavy_check_mark:  |
-| FLOSS     | [Gharghabi et al.](https://ieeexplore.ieee.org/abstract/document/8215484)         | Stable :heavy_check_mark:  |
-| BOCPD     | [Adams et al.](https://arxiv.org/abs/0710.3742)                                   | Experimental (mean change) |
-| Baseline  | Weber                                                                             | Stable :heavy_check_mark:  |
+| Algorithm                                         | Source                                                                             | Status                     |
+|---------------------------------------------------|------------------------------------------------------------------------------------|----------------------------|
+| SST & [Accelerated SST](docs/fast-sst.md)         | [Idé](https://epubs.siam.org/doi/abs/10.1137/1.9781611972757.63) & [Weber et al.](https://doi.org/10.1109/ACCESS.2025.3640386)           | Stable  :heavy_check_mark: |
+| IKA-SST & [Accelerated IKA-SST](docs/fast-sst.md) | [Idé](https://epubs.siam.org/doi/abs/10.1137/1.9781611972771.54) & [Weber et al.](https://doi.org/10.1109/ACCESS.2025.3640386)           | Stable  :heavy_check_mark: |
+| RSST                                              | [Boelter & Weber et al.](https://ntrs.nasa.gov/citations/20250002705)              | Stable :heavy_check_mark:  |
+| RuLSIF                                            | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270)  | Stable  :heavy_check_mark: |
+| uLSIF                                             | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270)  | Stable  :heavy_check_mark: |
+| KLIEP                                             | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270)  | Planned                    |
+| ClaSP                                             | [Ermshaus et al.](https://link.springer.com/article/10.1007/s10618-023-00923-x)    | Deactivated :x:            |
+| FLUSS                                             | [Gharghabi et al.](https://ieeexplore.ieee.org/abstract/document/8215484)          | Stable :heavy_check_mark:  |
+| FLOSS                                             | [Gharghabi et al.](https://ieeexplore.ieee.org/abstract/document/8215484)          | Stable :heavy_check_mark:  |
+| BOCPD                                             | [Adams et al.](https://arxiv.org/abs/0710.3742)                                    | Experimental (mean change) |
+| Baseline                                          | Weber                                                                              | Stable :heavy_check_mark:  |
 
 
 
@@ -155,7 +155,6 @@ not want to be in the way!
 # Known Issues <a id="known-issues"></a>
 
 ### Division by Zero for SST with IKA
-
 Some of the methods like SST (with method='ika') and (R)uLSIF have issues when running for trivial sections of time
 series. This includes steady series (e.g., only zero values, just lines with some slope). Intuitively, these methods aim
 to extract multiple characteristics in these sections but there are none, so they run into issues. Errors you will
