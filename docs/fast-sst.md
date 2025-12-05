@@ -1,4 +1,7 @@
 # Fast SST and IKA-SST
+> TL;DR: For window sizes/lengths > 200 activate `fast_hankel=True` when using the 
+> [SST](../changepoynt/algorithms/sst.py) (with `method='ika'` or `method='rsvd'`)
+> 
 Wie published a [paper](https://doi.org/10.1109/ACCESS.2025.3640386) on accelerating the SST and IKA-SST. The paper is
 open access and available for everyone. There is [dedicated source code](https://github.com/Lucew/approximate_hankel)
 for reproducing the paper, but we also implemented the methods in this package.
