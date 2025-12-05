@@ -3,7 +3,8 @@ Wie published a [paper](https://doi.org/10.1109/ACCESS.2025.3640386) on accelera
 open access and available for everyone. There is [dedicated source code](https://github.com/Lucew/approximate_hankel)
 for reproducing the paper, but we also implemented the methods in this package.
 
-Our contributions reduce the runtime from minutes to (milliseconds) while they only incur a minor approximation error:
+Depending on the application, our contributions reduce the runtime from minutes to (milli)seconds while they only incur 
+a minor approximation error:
 ![Speed Factors](../images/graphical_abstract.png)
 
 To use the methods activate `fast_hankel=True` and the option `method='ika'` or `method='rsvd'` when using the
