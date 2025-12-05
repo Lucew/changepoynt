@@ -31,6 +31,14 @@ class SST(Algorithm):
     "Finding structure with randomness: Probabilistic algorithms for constructing approximate matrix decompositions."
     SIAM review 53.2 (2011): 217-288.
 
+    For the option fast_hankel=True it uses and algorithm based on
+
+    [4]
+    L. Weber and R. Lenz.
+    "Accelerating Singular Spectrum Transformation for Scalable Change Point Detection,"
+    in IEEE Access, Volume 11, 2025.
+    doi: 10.1109/ACCESS.2025.3640386.
+
     There will be a parameter specifying, whether to use the implicit krylov approximation from [2]. This
     significantly speeds up the computation but can reduce accuracy as the "eigensignals" are only approximated
     indirectly using a krylov subspace with the possible change point signal as seed. This method also deploys
