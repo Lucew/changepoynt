@@ -2,7 +2,7 @@ import numpy as np
 np.random.seed(123)
 import matplotlib.pyplot as plt
 import seaborn as sns
-from changepoynt.algorithms.sst import SingularSpectrumTransformation
+from changepoynt.algorithms.sst import SST
 import time
 import pandas as pd
 
@@ -58,9 +58,9 @@ def qualitative_comparison():
     x = generate_functions(2)
 
     # compute change score using sst
-    own_score = SingularSpectrumTransformation(window_length=60, lag=20, rank=5, method='ika').transform(x)
+    own_score = SST(window_length=60, lag=20, rank=5, method='ika').transform(x)
     # compute change score using other implementation
-    other_score = SingularSpectrumTransformation(window_length=60, lag=20, rank=5, method='fbrsvd').transform(x)
+    other_score = SST(window_length=60, lag=20, rank=5, method='fbrsvd').transform(x)
     plot_data_and_score(x, own_score, other_score)
     plt.show()
 
@@ -75,14 +75,14 @@ def speed_comparison():
     x = generate_functions(2)
 
     # trigger the jit compilation so comparison is fair
-    SingularSpectrumTransformation(10, method='ika').transform(x)
-    SingularSpectrumTransformation(10, method='svd').transform(x)
-    SingularSpectrumTransformation(10, method='rsvd').transform(x)
-    SingularSpectrumTransformation(10, method='fbrsvd').transform(x)
+    SST(10, method='ika').transform(x)
+    SST(10, method='svd').transform(x)
+    SST(10, method='rsvd').transform(x)
+    SST(10, method='fbrsvd').transform(x)
 
     def time_per_window_length(window_length, method):
         # create the SST object
-        sst = SingularSpectrumTransformation(window_length, method=method)
+        sst = SST(window_length, method=method)
 
         # compute the scores and add to the timing
         start = time.time()
