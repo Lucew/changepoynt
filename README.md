@@ -5,7 +5,7 @@
 [![downloads](https://img.shields.io/pypi/dm/changepoynt?color=%2376519B)](https://pypi.org/project/changepoynt/)
 
 **changepoynt** is a Python library for change point detection / changepoint detection in time series (offline and online).
-It includes Singular Spectrum Transformation (SST, IKA-SST), density-ratio change detection (uLSIF, RuLSIF), 
+It includes Singular Spectrum Transformation (SST, IKA-SST, ESST), density-ratio change detection (uLSIF, RuLSIF), 
 and matrix-profile segmentation (FLUSS, FLOSS).
 
 

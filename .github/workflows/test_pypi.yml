@@ -107,8 +107,11 @@ jobs:
       - name: Extract the version number we are aiming to install
         run: |
           sh extract_and_publish_version.sh ${{ github.run_number }}
+      - name: Get Pytest as the extra dependency
+        run: |
+          python3 -m pip install pytest
       # retry the installation as test.pypi sometimes takes am moment to refresh
-      - name:
+      - name: Get the published Package from test.pypi.org
         uses: nick-fields/retry@v2
         with:
           max_attempts: 3
@@ -119,8 +122,7 @@ jobs:
           # get only the test files for the test of the installed package
           # also we need the extra url to acquire the dependencies
           command: |
-              python3 -m pip install pytest
-              python3 -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ changepoynt==${{ env.VERSION_WITH_BUILD }}
+              python3 -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/changepoynt==${{ env.VERSION_WITH_BUILD }}
       - name: Test with pytest
         run: pytest
 
