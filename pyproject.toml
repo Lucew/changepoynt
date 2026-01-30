@@ -9,17 +9,52 @@ version = "0.1.1"
 authors = [
   { name="Lucas Weber", email="weber-lucas@web.de" },
 ]
-description = "Efficient and readable change point detection package implemented in Python. (Singular Spectrum Transformation - SST, IKA-SST, ulSIF, RuLSIF, KLIEP, FLUSS, FLOSS, etc.)"
+description = "Change point / changepoint detection for time series in Python (Singular Spectrum Transformation - SST, IKA-SST, ulSIF, RuLSIF, KLIEP, FLUSS, FLOSS, etc.). Focus on efficient implementation and readable code."
 readme = "README.md"
 requires-python = ">=3.8"
 license = "BSD-2-Clause"
 classifiers = [
     "Programming Language :: Python :: 3",
+
     "Operating System :: OS Independent",
+
     "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
 ]
 license-files = ["LICENSE"]
-keywords = ['changepoint', 'times series', 'engineering', 'SST', 'change point detection', 'CPD']
+keywords = [
+  "change point detection",
+  "changepoint detection",
+  "change-point detection",
+  "change detection",
+  "structural break",
+  "regime shift",
+  "time series",
+  "time-series",
+  "timeseries",
+  "time series analysis",
+  "segmentation",
+  "anomaly detection",
+  "concept drift",
+  "drift detection",
+  "online detection",
+  "streaming",
+  "Singular Spectrum Transformation",
+  "SST",
+  "IKA-SST",
+  "density ratio estimation",
+  "uLSIF",
+  "RuLSIF",
+  "KLIEP",
+  "matrix profile",
+  "FLUSS",
+  "FLOSS",
+]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
@@ -28,6 +63,8 @@ optional-dependencies = {test = { file = ["requirements_tests.txt"] }, example =
 [project.urls]
 Homepage = "https://github.com/Lucew/changepoynt"
 Issues = "https://github.com/Lucew/changepoynt/issues"
+Source = "https://github.com/Lucew/changepoynt"
+Changelog = "https://github.com/Lucew/changepoynt/releases"
 
 [tool.setuptools]
 packages = ["changepoynt", "changepoynt.algorithms", "changepoynt.utils", "changepoynt.visualization"]
