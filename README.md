@@ -4,6 +4,11 @@
 [![python](https://img.shields.io/pypi/pyversions/changepoynt?color=%2376519B)](https://pypi.org/project/changepoynt/)
 [![downloads](https://img.shields.io/pypi/dm/changepoynt?color=%2376519B)](https://pypi.org/project/changepoynt/)
 
+**changepoynt** is a Python library for change point detection / changepoint detection in time series (offline and online).
+It includes Singular Spectrum Transformation (SST, IKA-SST), density-ratio change detection (uLSIF, RuLSIF), 
+and matrix-profile segmentation (FLUSS, FLOSS).
+
+
 **Table of content:**
  - [Quickstart](#quickstart)
  - [Examples](#examples)
@@ -128,9 +133,9 @@ are currently under development. An overview with sources can be seen here:
 | Algorithm                           | Source                                                                             | Status                      |
 |-------------------------------------|------------------------------------------------------------------------------------|-----------------------------|
 | SST                                 | [Idé](https://epubs.siam.org/doi/abs/10.1137/1.9781611972757.63)                   | Stable  :heavy_check_mark:  |
-| [Accelerated SST](docs/fast-sst.md) | [Weber et al.](https://doi.org/10.1109/ACCESS.2025.3640386)                        | Stable  :heavy_check_mark:  |
+| [Accelerated SST](https://github.com/Lucew/changepoynt/blob/master/docs/fast-sst.md) | [Weber et al.](https://doi.org/10.1109/ACCESS.2025.3640386)                        | Stable  :heavy_check_mark:  |
 | IKA-SST                             | [Idé](https://epubs.siam.org/doi/abs/10.1137/1.9781611972771.54)                   | Stable  :heavy_check_mark:  |
-| [Accelerated IKA-SST](docs/fast-sst.md) | [Weber et al.](https://doi.org/10.1109/ACCESS.2025.3640386)                    | Stable  :heavy_check_mark:  |     
+| [Accelerated IKA-SST](https://github.com/Lucew/changepoynt/blob/master/docs/fast-sst.md) | [Weber et al.](https://doi.org/10.1109/ACCESS.2025.3640386)                    | Stable  :heavy_check_mark:  |     
 | ESST                                | [Boelter & Weber et al.](https://ntrs.nasa.gov/citations/20250002705)              | Stable :heavy_check_mark:   |
 | RuLSIF                              | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270)  | Stable  :heavy_check_mark:  |
 | uLSIF                               | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270)  | Stable  :heavy_check_mark:  |
@@ -165,11 +170,6 @@ complicated and I have not yet found a good way to circumvent these errors.
 Fortunately, there is an easy workaround. Just add a small white noise to your signal, e.g. by adding 
 `signal += np.random.normal(0, 1e-4, size=signal.shape[0])`. With noise much smaller than you signal you will not
 introduce large additional change points and the methods will not fail.
-
-### Python 3.13 not supported for all methods
-We are aware that some dependencies currently are not supporting Python 3.13 and higher.
-These packages are mostly used for the fast_hankel option, and we are currently checking whether to make those packages
-optional.
 
 # Outlook <a id="outlook"></a>
 
