@@ -8,6 +8,15 @@
 It includes Singular Spectrum Transformation (SST, IKA-SST, ESST), density-ratio change detection (uLSIF, RuLSIF), 
 and matrix-profile segmentation (FLUSS, FLOSS).
 
+Start using it:
+```bash
+pip install changepoynt
+```
+or
+```bash
+uv pip install changepoynt
+```
+
 
 **Table of content:**
  - [Quickstart](#quickstart)
