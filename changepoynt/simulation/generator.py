@@ -150,7 +150,7 @@ class ChangeGenerator:
             cplist = cplist[choose <= linkage]
 
             # transform back to list and append to the new events
-            new_event_list.extend(cplist)
+            new_event_list.extend(cplist.tolist())
 
         # sort the new event list
         new_event_list = [0] + sorted(new_event_list) + [self.length]
