@@ -168,7 +168,8 @@ def randomized_hankel_svd(hankel_matrix: np.ndarray, k: int, subspace_iteration_
     assert 1.25 * sample_length_l < min(hankel_matrix.shape)
 
     # Apply A to a random matrix, obtaining Q.
-    random_matrix_omega = np.random.uniform(low=-1, high=1, size=(hankel_matrix.shape[1], sample_length_l))
+    # random_matrix_omega = np.random.uniform(low=-1, high=1, size=(hankel_matrix.shape[1], sample_length_l))
+    random_matrix_omega= np.random.default_rng(42).uniform(low=-1, high=1, size=(hankel_matrix.shape[1], sample_length_l))
     projection_matrix_q = hankel_matrix @ random_matrix_omega
 
     # Form a matrix Q whose columns constitute a well-conditioned basis for the columns of the earlier Q.
