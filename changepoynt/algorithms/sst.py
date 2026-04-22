@@ -157,19 +157,35 @@ class SST(Algorithm):
                         'naive': partial(_naive_singular_value_decomposition,
                                           rank=self.rank),
                         'naive updated': partial(_naive_singular_value_decomposition_updated_score,
-                                         rank=self.rank)
+                                         rank=self.rank),
+                        'weighted': partial(_weighted_random_singular_value_decomposition,
+                                            rank=self.rank,
+                                            randomized_rank=self.random_rank),
                         }
         if self.method not in self.methods:
             raise ValueError(f'Method {self.method} not defined. Possible methods: {list(self.methods.keys())}.')
 
         # set up the methods we use for the construction of the hankel matrix (either it is the fft representation
         # of the other one)
-        if use_fast_hankel and self.method not in ["rsvd", "ika"]:
+        if use_fast_hankel and self.method not in ["rsvd", "ika", "weighted"]:
             raise ValueError(f'{self.method} method is not defined with use_fast_hankel=True')
         self.hankel_construction = {
             False: lg.compile_hankel,
             True: lg.HankelFFTRepresentation
         }
+
+        # We can only use one of the following options: mitigate_offset OR use_fast_hankel (read: exclusive or, XOR)
+        # or none of both
+        #
+        # the reasons is that fast hankel does the matrix multiplication via an FFT convolution over the whole Hankel
+        # matrix at once
+        #
+        # mitigate_offset works by subtracting column wise mean values (one per subsequence that construct the Hankel
+        # matrix.
+        #
+        # When using the FFT convolution, we cannot subtract column wise mean values
+        if self.use_fast_hankel and self.mitigate_offset:
+            raise ValueError(f'use_fast_hankel={self.use_fast_hankel} is not allowed when mitigate_offset={self.mitigate_offset}. You can only use one or none of them.')
 
         # check whether the method is correct
         assert self.method in self.methods, f'Specified method {self.method} is not available in {self.methods.keys()}.'
@@ -240,30 +256,18 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
     # make an offset for the data construction
     offset = n_windows // 2 + lag
 
-    # compute the sliding mean value for the complete time series using a convolution
-    # we get the length of the sliding window from the start index
-    # the sliding window contains both hankel matrices
-    current_min = None
-    if mitigate_offset:
-        current_min = np.mean(np.lib.stride_tricks.sliding_window_view(time_series, window_shape = start_idx), axis = 1)
-
     # iterate over all the values in the signal starting at start_idx computing the change point score
     for idx in range(start_idx, time_series.shape[0], scoring_step):
 
-        # get the constant offset (is zero if the option is deactivated)
-        if mitigate_offset:
-            const_offset = current_min[idx-start_idx]-1
-        else:
-            const_offset = None
-
-
         # compile the past hankel matrix (H1)
-        hankel_past = hankel_construction_function(time_series, idx - lag, window_length, n_windows,
-                                                   const_offset=const_offset)
+        hankel_past = hankel_construction_function(time_series, idx - lag, window_length, n_windows)
+        if mitigate_offset:
+            hankel_past = hankel_past - hankel_past.mean(axis=0)+1
 
         # compile the future hankel matrix (H2)
-        hankel_future = hankel_construction_function(time_series, idx, window_length, n_windows,
-                                                     const_offset=const_offset)
+        hankel_future = hankel_construction_function(time_series, idx, window_length, n_windows)
+        if mitigate_offset:
+            hankel_future = hankel_future - hankel_future.mean(axis=0)+1
 
         # compute the score and save the returned feedback vector
         score[idx - offset - scoring_step // 2:idx - offset + (scoring_step + 1) // 2], x1 = \
@@ -298,7 +302,7 @@ def _implicit_krylov_approximation(hankel_past: np.ndarray, hankel_future: np.nd
 
     # compute the biggest eigenvector of the hankel matrix after the possible change point (h2)
     c_2 = hankel_future @ hankel_future.T
-    _, eigvec_future = lg.power_method(c_2, x0, n_iterations=1)
+    _, eigvec_future = lg.power_method(c_2, x0, n_iterations=5)
 
     # compute the empirical covariance matrix before the possible change point (H1)
     c_1 = hankel_past @ hankel_past.T
@@ -338,7 +342,7 @@ def _rayleigh_singular_value_decomposition(hankel_past: np.ndarray, hankel_futur
 
     # compute the dominant eigenvector of the future time series
     c_2 = hankel_future @ hankel_future.T
-    _, eigvec_future = lg.power_method(c_2, x0, n_iterations=1)
+    _, eigvec_future = lg.power_method(c_2, x0, n_iterations=5)
 
     # compute the projection distance
     alpha = singvecs_past.T @ eigvec_future
@@ -377,7 +381,7 @@ def _facebook_random_singular_value_decomposition(hankel_past: np.ndarray, hanke
     """
     # compute the biggest eigenvector of the hankel matrix after the possible change point (h2)
     c_2 = hankel_future @ hankel_future.T
-    _, eigvec_future = lg.power_method(c_2, x0, n_iterations=1)
+    _, eigvec_future = lg.power_method(c_2, x0, n_iterations=5)
 
     # compute the eigenvectors of the past hankel matrix
     _, singvecs_past = lg.facebook_randomized_svd(hankel_past, randomized_rank=randomized_rank)
@@ -418,8 +422,7 @@ def _random_singular_value_decomposition(hankel_past: np.ndarray, hankel_future:
     :return: the change point score, the new dominant eigenvector of H2 for the feedback into the next H2
     """
     # compute the biggest eigenvector of the hankel matrix after the possible change point (h2)
-    c_2 = hankel_future @ hankel_future.T
-    _, eigvec_future = lg.power_method(c_2, x0, n_iterations=1)
+    eigvec_future, _, _ = lg.randomized_hankel_svd(hankel_future, 1, oversampling_p=randomized_rank - rank)
 
     # compute the eigenvectors of the past hankel matrix
     singvecs_past, _, _ = lg.randomized_hankel_svd(hankel_past, rank, oversampling_p=randomized_rank-rank)
@@ -427,6 +430,60 @@ def _random_singular_value_decomposition(hankel_past: np.ndarray, hankel_future:
     # compute the change point score as defined in the papers
     alpha = singvecs_past[:, :rank].T @ eigvec_future
     return 1 - alpha.T @ alpha, eigvec_future
+
+
+def _weighted_random_singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
+                                                  rank: int, randomized_rank: int):
+    """
+    This function implements the idea of
+
+    Idé, Tsuyoshi, and Keisuke Inoue.
+    "Knowledge discovery from heterogeneous dynamic systems using change-point correlations."
+    Proceedings of the 2005 SIAM international conference on data mining.
+    Society for Industrial and Applied Mathematics, 2005.
+
+    but uses the randomized svd decomposition by
+
+    Halko, Nathan, Per-Gunnar Martinsson, and Joel A. Tropp.
+    "Finding structure with randomness: Probabilistic algorithms for constructing approximate matrix decompositions."
+    SIAM review 53.2 (2011): 217-288.
+
+    !! It uses more than just the future vector. Instead, it computes a weighted score using multiple vectors
+
+    :param hankel_past: the hankel matrix H1 before the change point
+    :param hankel_future: the hankel matrix H2 after the change point
+    :param x0: the initialization value for the power method applied to H2 to find the dominant eigenvector
+    :param rank: the amount of (approximated) eigenvectors as subspace of H1
+    :param randomized_rank: the rank of the approximation used to construct the noise matrix
+    :return: the change point score, the new dominant eigenvector of H2 for the feedback into the next H2
+    """
+    # compute the biggest eigenvector of the hankel matrix after the possible change point (h2)
+    singvec_future, singval_future, _ = lg.randomized_hankel_svd(hankel_future, rank, oversampling_p=randomized_rank-rank)
+
+    # compute the eigenvectors of the past hankel matrix
+    singvecs_past, _, _ = lg.randomized_hankel_svd(hankel_past, rank, oversampling_p=randomized_rank-rank)
+
+    # this is the same as computing the normal SST score but for multiple future singular vectors
+    #
+    # It basically does
+    # score = 0
+    # for vc in range(singvec_future.shape[1]):
+    #     alpha = singvecs_past[:, :rank].T @ singvec_future[:, vc:vc+1]
+    #     score = score + (1 - alpha.T @ alpha)*singval_future[vc]
+    # score = score/np.sum(singval_future)
+    #
+    # but vectorized
+
+    # compute the differences between the past subspace and the future singular vectors
+    proj = singvecs_past.T @ singvec_future  # shape: rank x future_rank
+
+    # compute the difference for each of the future singular vectors
+    inside = np.sum(proj**2, axis=0)  # ||U_p^T u_j||^2 for each future vector
+
+    # compute a weighted mean of the scores
+    s2 = singval_future**2
+    score = np.sum((1.0 - inside) * s2) / np.sum(s2)
+    return score, x0
 
 
 def _naive_singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
