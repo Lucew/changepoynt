@@ -35,7 +35,7 @@ def power_method(a_matrix: np.ndarray, x_vector: np.ndarray, n_iterations: int) 
         x_vector = a_matrix @ x_vector
 
         # scale the vector so we keep the values in bound
-        x_vector = x_vector / np.max(x_vector)
+        x_vector = x_vector / np.max(np.abs(x_vector))
 
     # get the normed eigenvector
     x_vector = x_vector / np.linalg.norm(x_vector)
