@@ -27,8 +27,7 @@ class ESST(Algorithm):
 
     def __init__(self, window_length: int, n_windows: int = None, lag: int = None, rank: int = 5,
                  scale: bool = True, method: str = 'fbrsvd', random_rank: int = None, scoring_step: int = 1,
-                 parallel: bool = False, use_fast_hankel: bool = False, threads: int = None,
-                 mitigate_offset: bool = False) -> None:
+                 use_fast_hankel: bool = False, threads: int = None, mitigate_offset: bool = False) -> None:
         """
         Experimental change point detection method evaluation the prevalence of change points within a signal
         by comparing the difference in eigenvectors between to points in time.
@@ -61,8 +60,6 @@ class ESST(Algorithm):
 
         :param scoring_step: The distance between scoring steps in samples (e.g., 2 would half the computation).
 
-        :param parallel: The execution for the different steps can be parallelized in different processes.
-
         :param use_fast_hankel: Whether to deploy the fast hankel matrix product.
 
         :param threads: The number of threads the fast hankel matrix product is allowed to use. Default is the half of
@@ -79,7 +76,6 @@ class ESST(Algorithm):
         self.random_rank = random_rank
         self.lag = lag
         self.scoring_step = scoring_step
-        self.parallel = parallel
         self.use_fast_hankel = use_fast_hankel
         self.method = method
         self.threads = threads
@@ -145,13 +141,8 @@ class ESST(Algorithm):
         # get the different methods
         scoring_function = self.methods[self.method]
         hankel_function = self.hankel_construction[self.use_fast_hankel]
-
-        if self.parallel:
-            return _transform_parallel(time_series, starting_point, self.window_length, self.n_windows, self.lag,
-                                       self.scoring_step, scoring_function, hankel_function, self.mitigate_offset)
-        else:
-            return _transform(time_series, starting_point, self.window_length, self.n_windows, self.lag,
-                              self.scoring_step, scoring_function, hankel_function, self.mitigate_offset)
+        return _transform(time_series, starting_point, self.window_length, self.n_windows, self.lag,
+                          self.scoring_step, scoring_function, hankel_function, self.mitigate_offset)
 
 
 def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_windows: int, lag: int, scoring_step: int,
@@ -200,42 +191,6 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
         # compute the score and save the returned feedback vector
         score[idx-offset-scoring_step//2:idx-offset+(scoring_step+1)//2] = \
             scoring_function(np.concatenate((hankel_past, hankel_future), axis=1))
-
-    return score
-
-
-def _transform_parallel(time_series: np.ndarray, start_idx: int, window_length: int, n_windows: int, lag: int,
-                        scoring_step: int, scoring_function: Callable,
-                        hankel_construction_function: Callable, mitigate_offset: bool = False) -> np.ndarray:
-    """
-    Compute heavy and hopefully jit compilable score computation for the SST method. It does not do any parameter
-    checking and can throw cryptic errors. It's only used for internal use as a private function.
-
-    :param time_series: 1D array containing the time series to be scored
-    :param start_idx: integer defining the start sample index for the score computation
-    :param window_length: the size of the time series window for each column of the hankel matrix
-    :param n_windows: column number of the hankel matrix
-    """
-
-    # initialize a scoring array with no values yet
-    score = np.zeros_like(time_series)
-
-    # compute the offset
-    offset = (n_windows + lag)
-
-    # make the generator for the hankel matrices
-    gener = (np.concatenate(
-                            (hankel_construction_function(time_series, idx-lag, window_length, n_windows),
-                             hankel_construction_function(time_series, idx, window_length, n_windows)
-                             ),
-                            axis=1)
-             for idx in range(start_idx, time_series.shape[0], scoring_step))
-
-    # make a process pool with batches
-    with mp.Pool(mp.cpu_count()) as pp:
-        for idx, result in enumerate(pp.imap(scoring_function, gener, chunksize=100)):
-            idx = start_idx + idx*scoring_step
-            score[idx - offset - scoring_step // 2:idx - offset + (scoring_step + 1) // 2] = result
 
     return score
 
@@ -324,7 +279,7 @@ def _main():
     x += np.random.rand(x.size)
 
     # create the method
-    esst_recognizer = ESST(300, method='rsvd', parallel=False, use_fast_hankel=True)
+    esst_recognizer = ESST(300, method='rsvd', use_fast_hankel=True)
 
     # compute the score
     start = time()
