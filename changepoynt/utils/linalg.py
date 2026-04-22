@@ -80,7 +80,9 @@ def lanczos(a_matrix: np.ndarray, r_0: np.ndarray, k: int) -> (np.ndarray, np.nd
 
         # compute the new alpha
         intermediate_amatrix_newq = a_matrix @ new_q
-        alphas[j + 1] = new_q.T @ intermediate_amatrix_newq
+        # Comment: (new_q.T @ intermediate_amatrix_newq).shape = [1,1], but with numpy 2.0 we have to explicitly
+        # extract the scalar
+        alphas[j + 1] = (new_q.T @ intermediate_amatrix_newq)[0, 0]
 
         # compute the new r
         r_i = intermediate_amatrix_newq - alphas[j + 1] * new_q - betas[j] * q_i
