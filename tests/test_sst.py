@@ -72,6 +72,14 @@ class TestSST:
         sst = ssts.SST(50, method="ika", use_fast_hankel=True)
         res2 = sst.transform(self.signal)
 
+    def test_weighted_method(self):
+
+        # initialize the scorer
+        sst = ssts.SST(50, method="weighted")
+        res = sst.transform(self.signal)
+        sst = ssts.SST(50, method="weighted", use_fast_hankel=True)
+        res2 = sst.transform(self.signal)
+
     def test_naive_method(self):
 
         # initialize the scorer
@@ -80,6 +88,17 @@ class TestSST:
         with pytest.raises(ValueError):
             sst = ssts.SST(50, method="naive", use_fast_hankel=True)
             res2 = sst.transform(self.signal)
+
+    def test_all_methods_mitigate_offset(self):
+        # initialize random default method
+        sst = ssts.SST(30)
+
+        # get the different method names
+        methods = list(sst.methods.keys())
+
+        # go through the methods and check execution
+        for method in methods:
+            ssts.SST(50, rank=2, method=method, mitigate_offset=True).transform(self.signal)
 
     def test_default(self):
         ssts.SST(min(5, self.signal_length//2), rank=2).transform(self.signal)
