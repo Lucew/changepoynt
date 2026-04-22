@@ -110,6 +110,19 @@ class ESST(Algorithm):
             False: lg.compile_hankel,
             True: lg.HankelFFTRepresentation
         }
+
+        # We can only use one of the following options: mitigate_offset OR use_fast_hankel (read: exclusive or, XOR)
+        # or none of both
+        #
+        # the reasons is that fast hankel does the matrix multiplication via an FFT convolution over the whole Hankel
+        # matrix at once
+        #
+        # mitigate_offset works by subtracting column wise mean values (one per subsequence that construct the Hankel
+        # matrix.
+        #
+        # When using the FFT convolution, we cannot subtract column wise mean values
+        if self.use_fast_hankel and self.mitigate_offset:
+            raise ValueError(f'use_fast_hankel={self.use_fast_hankel} is not allowed when mitigate_offset={self.mitigate_offset}. You can only use one or none of them.')
         # TODO: Create tests for the ESST
 
     def transform(self, time_series: np.ndarray) -> np.ndarray:
@@ -164,29 +177,18 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
     # compute the offset
     offset = (n_windows + lag)
 
-    # compute the sliding mean value for the complete time series using a convolution
-    # we get the length of the sliding window from the start index
-    # the sliding window contains both hankel matrices
-    current_min = None
-    if mitigate_offset:
-        current_min = np.median(np.lib.stride_tricks.sliding_window_view(time_series, window_shape=start_idx), axis=1)
-
     # iterate over all the values in the signal starting at start_idx computing the change point score
     for idx in range(start_idx, time_series.shape[0], scoring_step):
 
-        # get the constant offset (is zero if the option is deactivated)
-        if mitigate_offset:
-            const_offset = current_min[idx - start_idx] - 1
-        else:
-            const_offset = None
-
         # compile the past hankel matrix (H1)
-        hankel_past = hankel_construction_function(time_series, idx - lag, window_length, n_windows,
-                                                   const_offset=const_offset)
+        hankel_past = hankel_construction_function(time_series, idx - lag, window_length, n_windows)
+        if mitigate_offset:
+            hankel_past = hankel_past - hankel_past.mean(axis=0)+1
 
         # compile the future hankel matrix (H2)
-        hankel_future = hankel_construction_function(time_series, idx, window_length, n_windows,
-                                                     const_offset=const_offset)
+        hankel_future = hankel_construction_function(time_series, idx, window_length, n_windows)
+        if mitigate_offset:
+            hankel_future = hankel_future - hankel_future.mean(axis=0)+1
 
         # compute the score and save the returned feedback vector
         score[idx-offset-scoring_step//2:idx-offset+(scoring_step+1)//2] = \
