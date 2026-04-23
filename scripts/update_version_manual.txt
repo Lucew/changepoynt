@@ -3,12 +3,12 @@
 # Install the build package to test build locally
 pip install --upgrade build
 
-# build the package locally to check whether it works
-python -m build
-
 # update the version in:
 ./setup.py
 ./pyproject.toml
+
+# build the package locally to check whether it works
+python -m build
 
 # make a commit with message: (publish attempt) at the end
 # this will run the publishing pipeline
