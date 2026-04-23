@@ -57,39 +57,50 @@ If you want to start using the package right away, we recommend using one of the
 algorithms (SST). The first step is to install the package using pip. Then you can use the following example code:
 
 ```python
-import numpy as np  # for signal creation
-import matplotlib.pyplot as plt  # to show the plot
-from changepoynt.algorithms.esst import ESST  # import the scoring algorithm
-from changepoynt.visualization.score_plotting import plot_data_and_score  # import a visualization function
+import numpy as np
+import matplotlib.pyplot as plt
+from changepoynt.algorithms.esst import ESST
+from changepoynt.algorithms.sst import SST
+from changepoynt.visualization.score_plotting import plot_data_and_score
 
-# simulate a signal that goes from exponential decline into a sine wave
-# the signals is only for demonstration purposes and can be replaced by your signal
-steady_before = np.ones(200)
+# create a signal that goes from steady to exponential decline into a sine curve
 exp_signal = np.exp(-np.linspace(0, 5, 200))
 steady_after = np.exp(-5)*np.ones(150)
+steady_before = np.ones(200)
 sine_after = 0.2*np.sin(np.linspace(0, 3*np.pi*10, 300))
+
+# make the signal
 signal = np.concatenate((steady_before, exp_signal, steady_after, sine_after))
-signal += 0.01*np.random.randn(signal.shape[0])  # add some minor noise
+signal += 0.01*np.random.randn(signal.shape[0])
 
-# This part is all you need to do to score a signal with our package 
-# create the scorer and compute the change score
-detector = ESST(30)
-detection = detector.transform(signal)
+# make change point detection
+esst_detector = ESST(40)
+esst_detection = esst_detector.transform(signal)
 
-# make the plot using the built-in function of the package                                               
-plot_data_and_score(signal, detection)
+# make change point detection
+sst_detector = SST(40, method='rsvd', mitigate_offset=True)
+sst_detection = sst_detector.transform(signal)
+
+# make the plot
+plot_data_and_score(signal, esst_detection)
+plt.gcf().tight_layout()
+plot_data_and_score(signal, sst_detection)
+plt.gcf().tight_layout()
 plt.show()
-
 ```
 
 The result looks like this:
-![image](https://github.com/Lucew/changepoynt/raw/master/images/minimal_example_result.png)
+
+**ESST**:
+![image](https://github.com/Lucew/changepoynt/raw/master/images/minimal_example_result_esst.png)
+**SST**:
+![image](https://github.com/Lucew/changepoynt/raw/master/images/minimal_example_result_sst.png)
 
 # Examples <a id="examples"></a>
 
 You can find example code within the examples folder of this repository. We also wanted to tease the
 functionality using two different signals in order to show the capabilities of one of our recommended algorithms
-[ESST](https://github.com/Lucew/changepoynt/blob/master/changepoynt/algorithms/esst.py). If you want to use the 
+[ESST](https://github.com/Lucew/changepoynt/blob/master/changepoynt/algorithms/esst.py) or [SST](https://github.com/Lucew/changepoynt/blob/master/changepoynt/algorithms/sst.py). If you want to use the 
 algorithms on the contents of a CSV directly, there is a frontend demonstrator currently hosted 
 [here](https://demo.changepoynt.de/) (the adress is https://demo.changepoynt.de/, the 
 code for the demonstrator is [here](https://github.com/Lucew/changepoynt/tree/master/frontend)).
@@ -139,33 +150,31 @@ Find the [FAQs](https://github.com/Lucew/changepoynt/blob/master/docs/FAQ.md) in
 We are actively working on the package. Therefore, some algorithms are already available, while others
 are currently under development. An overview with sources can be seen here:
 
-| Algorithm                           | Source                                                                             | Status                      |
-|-------------------------------------|------------------------------------------------------------------------------------|-----------------------------|
-| SST                                 | [Idé](https://epubs.siam.org/doi/abs/10.1137/1.9781611972757.63)                   | Stable  :heavy_check_mark:  |
-| [Accelerated SST](https://github.com/Lucew/changepoynt/blob/master/docs/fast-sst.md) | [Weber et al.](https://doi.org/10.1109/ACCESS.2025.3640386)                        | Stable  :heavy_check_mark:  |
-| IKA-SST                             | [Idé](https://epubs.siam.org/doi/abs/10.1137/1.9781611972771.54)                   | Stable  :heavy_check_mark:  |
-| [Accelerated IKA-SST](https://github.com/Lucew/changepoynt/blob/master/docs/fast-sst.md) | [Weber et al.](https://doi.org/10.1109/ACCESS.2025.3640386)                    | Stable  :heavy_check_mark:  |     
-| ESST                                | [Boelter & Weber et al.](https://ntrs.nasa.gov/citations/20250002705)              | Stable :heavy_check_mark:   |
-| RuLSIF                              | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270)  | Stable  :heavy_check_mark:  |
-| uLSIF                               | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270)  | Stable  :heavy_check_mark:  |
-| KLIEP                               | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270)  | Planned                     |
-| ClaSP                               | [Ermshaus et al.](https://link.springer.com/article/10.1007/s10618-023-00923-x)    | Deactivated :x:             |
-| FLUSS                               | [Gharghabi et al.](https://ieeexplore.ieee.org/abstract/document/8215484)          | Stable :heavy_check_mark:   |
-| FLOSS                               | [Gharghabi et al.](https://ieeexplore.ieee.org/abstract/document/8215484)          | Stable :heavy_check_mark:   |
-| BOCPD                               | [Adams et al.](https://arxiv.org/abs/0710.3742)                                    | Experimental (mean change)  |
-| Baseline                            | Weber                                                                              | Stable :heavy_check_mark:   |
+| Algorithm                                                                         | Source                                                                             | Status                      |
+|-----------------------------------------------------------------------------------|------------------------------------------------------------------------------------|-----------------------------|
+| SST                                                                               | [Idé](https://epubs.siam.org/doi/abs/10.1137/1.9781611972757.63)                   | Stable  :heavy_check_mark:  |
+| [Fast SST](https://github.com/Lucew/changepoynt/blob/master/docs/fast-sst.md)     | [Weber et al.](https://doi.org/10.1109/ACCESS.2025.3640386)                        | Stable  :heavy_check_mark:  |
+| IKA-SST                                                                           | [Idé](https://epubs.siam.org/doi/abs/10.1137/1.9781611972771.54)                   | Stable  :heavy_check_mark:  |
+| [Fast IKA-SST](https://github.com/Lucew/changepoynt/blob/master/docs/fast-sst.md) | [Weber et al.](https://doi.org/10.1109/ACCESS.2025.3640386)                    | Stable  :heavy_check_mark:  |     
+| ESST                                                                              | [Boelter & Weber et al.](https://ntrs.nasa.gov/citations/20250002705)              | Stable :heavy_check_mark:   |
+| RuLSIF                                                                            | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270)  | Stable  :heavy_check_mark:  |
+| uLSIF                                                                             | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270)  | Stable  :heavy_check_mark:  |
+| KLIEP                                                                             | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270)  | Planned                     |
+| ClaSP                                                                             | [Ermshaus et al.](https://link.springer.com/article/10.1007/s10618-023-00923-x)    | Deactivated :x:             |
+| FLUSS                                                                             | [Gharghabi et al.](https://ieeexplore.ieee.org/abstract/document/8215484)          | Stable :heavy_check_mark:   |
+| FLOSS                                                                             | [Gharghabi et al.](https://ieeexplore.ieee.org/abstract/document/8215484)          | Stable :heavy_check_mark:   |
+| BOCPD                                                                             | [Adams et al.](https://arxiv.org/abs/0710.3742)                                    | Experimental (mean change)  |
+| Baseline                                                                          | Weber                                                                              | Stable :heavy_check_mark:   |
 
 
 # Contributing <a id="contributing"></a>
+The main way of contributing to this package is by opening an issue or a pull request. We are happy to answer answer
+any questions you might have in an issue.
 
 We always love to get feedback or new ideas. If you have any of those, feel free to open an issue. We try to get back to
 you as soon as we can.
 
- 
-
-If you are an author of a paper in the field or have another algorithmic idea: Feel free to open a pull request. 
-Currently, we are still working on the contribution guides. But if somebody already comes along and has an idea, we do 
-not want to be in the way!
+If you are an author of a paper in the field or have another algorithmic idea: Feel free to open a pull request.
 
 # Known Issues <a id="known-issues"></a>
 
@@ -184,7 +193,8 @@ introduce large additional change points and the methods will not fail.
 
 We are actively working on the package, and currently have the following steps planned:
 
-- We are actively working on a benchmark tool for change point algorithms
-- Implement Bayesian online change point detection
+- Researching intuitive explanations for SST parametrization
+- Setting up a documentation
+- Guideline for online deployment of the methods
 
 If you have further ideas, do not hesitate to open a ticket or a pull request!
