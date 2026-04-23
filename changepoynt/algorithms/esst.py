@@ -27,8 +27,7 @@ class ESST(Algorithm):
 
     def __init__(self, window_length: int, n_windows: int = None, lag: int = None, rank: int = 5,
                  scale: bool = True, method: str = 'fbrsvd', random_rank: int = None, scoring_step: int = 1,
-                 parallel: bool = False, use_fast_hankel: bool = False, threads: int = None,
-                 mitigate_offset: bool = False) -> None:
+                 use_fast_hankel: bool = False, threads: int = None, mitigate_offset: bool = False) -> None:
         """
         Experimental change point detection method evaluation the prevalence of change points within a signal
         by comparing the difference in eigenvectors between to points in time.
@@ -61,8 +60,6 @@ class ESST(Algorithm):
 
         :param scoring_step: The distance between scoring steps in samples (e.g., 2 would half the computation).
 
-        :param parallel: The execution for the different steps can be parallelized in different processes.
-
         :param use_fast_hankel: Whether to deploy the fast hankel matrix product.
 
         :param threads: The number of threads the fast hankel matrix product is allowed to use. Default is the half of
@@ -79,7 +76,6 @@ class ESST(Algorithm):
         self.random_rank = random_rank
         self.lag = lag
         self.scoring_step = scoring_step
-        self.parallel = parallel
         self.use_fast_hankel = use_fast_hankel
         self.method = method
         self.threads = threads
@@ -114,6 +110,19 @@ class ESST(Algorithm):
             False: lg.compile_hankel,
             True: lg.HankelFFTRepresentation
         }
+
+        # We can only use one of the following options: mitigate_offset OR use_fast_hankel (read: exclusive or, XOR)
+        # or none of both
+        #
+        # the reasons is that fast hankel does the matrix multiplication via an FFT convolution over the whole Hankel
+        # matrix at once
+        #
+        # mitigate_offset works by subtracting column wise mean values (one per subsequence that construct the Hankel
+        # matrix.
+        #
+        # When using the FFT convolution, we cannot subtract column wise mean values
+        if self.use_fast_hankel and self.mitigate_offset:
+            raise ValueError(f'use_fast_hankel={self.use_fast_hankel} is not allowed when mitigate_offset={self.mitigate_offset}. You can only use one or none of them.')
         # TODO: Create tests for the ESST
 
     def transform(self, time_series: np.ndarray) -> np.ndarray:
@@ -145,13 +154,8 @@ class ESST(Algorithm):
         # get the different methods
         scoring_function = self.methods[self.method]
         hankel_function = self.hankel_construction[self.use_fast_hankel]
-
-        if self.parallel:
-            return _transform_parallel(time_series, starting_point, self.window_length, self.n_windows, self.lag,
-                                       self.scoring_step, scoring_function, hankel_function, self.mitigate_offset)
-        else:
-            return _transform(time_series, starting_point, self.window_length, self.n_windows, self.lag,
-                              self.scoring_step, scoring_function, hankel_function, self.mitigate_offset)
+        return _transform(time_series, starting_point, self.window_length, self.n_windows, self.lag,
+                          self.scoring_step, scoring_function, hankel_function, self.mitigate_offset)
 
 
 def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_windows: int, lag: int, scoring_step: int,
@@ -173,69 +177,22 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
     # compute the offset
     offset = (n_windows + lag)
 
-    # compute the sliding mean value for the complete time series using a convolution
-    # we get the length of the sliding window from the start index
-    # the sliding window contains both hankel matrices
-    current_min = None
-    if mitigate_offset:
-        current_min = np.median(np.lib.stride_tricks.sliding_window_view(time_series, window_shape=start_idx), axis=1)
-
     # iterate over all the values in the signal starting at start_idx computing the change point score
     for idx in range(start_idx, time_series.shape[0], scoring_step):
 
-        # get the constant offset (is zero if the option is deactivated)
-        if mitigate_offset:
-            const_offset = current_min[idx - start_idx] - 1
-        else:
-            const_offset = None
-
         # compile the past hankel matrix (H1)
-        hankel_past = hankel_construction_function(time_series, idx - lag, window_length, n_windows,
-                                                   const_offset=const_offset)
+        hankel_past = hankel_construction_function(time_series, idx - lag, window_length, n_windows)
+        if mitigate_offset:
+            hankel_past = hankel_past - hankel_past.mean(axis=0)+1
 
         # compile the future hankel matrix (H2)
-        hankel_future = hankel_construction_function(time_series, idx, window_length, n_windows,
-                                                     const_offset=const_offset)
+        hankel_future = hankel_construction_function(time_series, idx, window_length, n_windows)
+        if mitigate_offset:
+            hankel_future = hankel_future - hankel_future.mean(axis=0)+1
 
         # compute the score and save the returned feedback vector
         score[idx-offset-scoring_step//2:idx-offset+(scoring_step+1)//2] = \
             scoring_function(np.concatenate((hankel_past, hankel_future), axis=1))
-
-    return score
-
-
-def _transform_parallel(time_series: np.ndarray, start_idx: int, window_length: int, n_windows: int, lag: int,
-                        scoring_step: int, scoring_function: Callable,
-                        hankel_construction_function: Callable, mitigate_offset: bool = False) -> np.ndarray:
-    """
-    Compute heavy and hopefully jit compilable score computation for the SST method. It does not do any parameter
-    checking and can throw cryptic errors. It's only used for internal use as a private function.
-
-    :param time_series: 1D array containing the time series to be scored
-    :param start_idx: integer defining the start sample index for the score computation
-    :param window_length: the size of the time series window for each column of the hankel matrix
-    :param n_windows: column number of the hankel matrix
-    """
-
-    # initialize a scoring array with no values yet
-    score = np.zeros_like(time_series)
-
-    # compute the offset
-    offset = (n_windows + lag)
-
-    # make the generator for the hankel matrices
-    gener = (np.concatenate(
-                            (hankel_construction_function(time_series, idx-lag, window_length, n_windows),
-                             hankel_construction_function(time_series, idx, window_length, n_windows)
-                             ),
-                            axis=1)
-             for idx in range(start_idx, time_series.shape[0], scoring_step))
-
-    # make a process pool with batches
-    with mp.Pool(mp.cpu_count()) as pp:
-        for idx, result in enumerate(pp.imap(scoring_function, gener, chunksize=100)):
-            idx = start_idx + idx*scoring_step
-            score[idx - offset - scoring_step // 2:idx - offset + (scoring_step + 1) // 2] = result
 
     return score
 
@@ -324,7 +281,7 @@ def _main():
     x += np.random.rand(x.size)
 
     # create the method
-    esst_recognizer = ESST(300, method='rsvd', parallel=False, use_fast_hankel=True)
+    esst_recognizer = ESST(300, method='rsvd', use_fast_hankel=True)
 
     # compute the score
     start = time()

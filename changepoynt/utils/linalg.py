@@ -35,7 +35,7 @@ def power_method(a_matrix: np.ndarray, x_vector: np.ndarray, n_iterations: int) 
         x_vector = a_matrix @ x_vector
 
         # scale the vector so we keep the values in bound
-        x_vector = x_vector / np.max(x_vector)
+        x_vector = x_vector / np.max(np.abs(x_vector))
 
     # get the normed eigenvector
     x_vector = x_vector / np.linalg.norm(x_vector)
@@ -80,7 +80,9 @@ def lanczos(a_matrix: np.ndarray, r_0: np.ndarray, k: int) -> (np.ndarray, np.nd
 
         # compute the new alpha
         intermediate_amatrix_newq = a_matrix @ new_q
-        alphas[j + 1] = new_q.T @ intermediate_amatrix_newq
+        # Comment: (new_q.T @ intermediate_amatrix_newq).shape = [1,1], but with numpy 2.0 we have to explicitly
+        # extract the scalar
+        alphas[j + 1] = (new_q.T @ intermediate_amatrix_newq)[0, 0]
 
         # compute the new r
         r_i = intermediate_amatrix_newq - alphas[j + 1] * new_q - betas[j] * q_i
