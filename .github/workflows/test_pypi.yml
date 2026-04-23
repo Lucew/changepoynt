@@ -27,9 +27,9 @@ jobs:
         python-version: [ '3.9', '3.11', '3.12', '3.14']
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
@@ -52,9 +52,9 @@ jobs:
     steps:
       # retrieve your distributions here
       - name: Get the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
       - name: Get the scripts file into the root directory
@@ -84,18 +84,18 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
-        python-version: [ '3.9', '3.11', '3.12', '3.14']
+        python-version: ['3.12', '3.14']
 
     steps:
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
       # https://github.com/actions/checkout#fetch-only-a-single-file
       # get only the test files for the test of the installed package
       - name: Get the test scripts from the original repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           sparse-checkout: |
             tests
@@ -112,7 +112,7 @@ jobs:
           python3 -m pip install pytest
       # retry the installation as test.pypi sometimes takes am moment to refresh
       - name: Get the published Package from test.pypi.org
-        uses: nick-fields/retry@v2
+        uses: nick-fields/retry@v4
         with:
           max_attempts: 3
           retry_on: error
@@ -140,9 +140,9 @@ jobs:
     steps:
       # retrieve your distributions here
       - name: Get the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
       - name: Make the build steps for the packaging
