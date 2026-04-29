@@ -1,3 +1,5 @@
+import typing
+
 import numpy as np
 import scipy.fft as spfft
 
@@ -727,7 +729,7 @@ class MultilevelBlockHankelRepresentation:
         return np.concatenate(tuple(mat.materialize()for mat in self.matrices), axis=self.axis)
 
 
-def check_matrix_operations(hankel_typed_matrix: [MultilevelBlockHankelRepresentation | BlockHankelRepresentation],
+def check_matrix_operations(hankel_typed_matrix: typing.Union[MultilevelBlockHankelRepresentation, BlockHankelRepresentation],
                             materialized_hankel: np.ndarray, other_size: int = 10):
 
     # print the checks
