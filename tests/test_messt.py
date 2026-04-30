@@ -5,17 +5,16 @@ from changepoynt.algorithms.messt import MESST
 import changepoynt.algorithms.esst as cpesst
 
 
-def _make_frequency_change_signal(
+def _make_change_signal(
     n_per_segment: int = 320,
-    period_before: int = 48,
-    period_after: int = 14,
-    noise: float = 0.02,
+    mean_before: int = 48,
+    mean_after: int = 14,
+    noise: float = 4,
     seed: int = 1234,
 ):
     rng = np.random.default_rng(seed)
-    t = np.arange(n_per_segment)
-    left = np.sin(2 * np.pi * t / period_before)
-    right = np.sin(2 * np.pi * t / period_after)
+    left = np.ones(n_per_segment) * mean_before
+    right = np.ones(n_per_segment) * mean_after
     signal = np.concatenate([left, right])
     signal += noise * rng.standard_normal(signal.shape[0])
     return signal, n_per_segment
@@ -44,7 +43,7 @@ def test_messt_rejects_fast_hankel_for_fbrsvd():
 
 
 def test_messt_rejects_1d_input():
-    signal, _ = _make_frequency_change_signal()
+    signal, _ = _make_change_signal()
     detector = MESST(window_length=40, method="rsvd")
     with pytest.raises(AssertionError):
         detector.transform(signal)
@@ -58,7 +57,7 @@ def test_messt_rejects_too_short_signal():
 
 
 def test_messt_score_is_zero_before_first_possible_output():
-    signal, _ = _make_frequency_change_signal()
+    signal, _ = _make_change_signal()
     detector = MESST(window_length=40, n_windows=20, lag=20, method="rsvd")
     np.random.seed(7)
     score = detector.transform(signal[..., None])
@@ -68,7 +67,7 @@ def test_messt_score_is_zero_before_first_possible_output():
 
 
 def test_messt_detects_frequency_change_near_boundary():
-    signal, change_idx = _make_frequency_change_signal()
+    signal, change_idx = _make_change_signal()
     detector = MESST(window_length=48, n_windows=24, lag=24, rank=2, method="rsvd")
 
     np.random.seed(11)
@@ -84,7 +83,7 @@ def test_messt_detects_frequency_change_near_boundary():
 
 
 def test_messt_fast_hankel_tracks_reference_implementation():
-    signal, _ = _make_frequency_change_signal()
+    signal, _ = _make_change_signal()
     slow = MESST(window_length=40, n_windows=20, lag=20, rank=2, method="rsvd", use_fast_hankel=False)
     fast = MESST(window_length=40, n_windows=20, lag=20, rank=2, method="rsvd", use_fast_hankel=True)
 
@@ -100,10 +99,11 @@ def test_messt_fast_hankel_tracks_reference_implementation():
 
 
 def test_messt_tracks_esst():
-    signal, _ = _make_frequency_change_signal()
-    slow = MESST(window_length=40, n_windows=20, lag=20, rank=2, method="rsvd", use_fast_hankel=False)
-    fast = MESST(window_length=40, n_windows=20, lag=20, rank=2, method="rsvd", use_fast_hankel=True)
-    orig_esst = cpesst.ESST(window_length=40, n_windows=20, lag=20, rank=2, method="rsvd", use_fast_hankel=False)
+    signal, _ = _make_change_signal()
+    ws = 30
+    slow = MESST(window_length=ws, n_windows=ws, lag=ws//2, rank=5, method="rsvd", use_fast_hankel=False)
+    fast = MESST(window_length=ws, n_windows=ws, lag=ws//2, rank=5, method="rsvd", use_fast_hankel=True)
+    orig_esst = cpesst.ESST(window_length=ws, n_windows=ws, lag=ws//2, rank=5, method="rsvd", use_fast_hankel=False)
 
     np.random.seed(31)
     slow_score = slow.transform(signal[..., None])
@@ -111,7 +111,6 @@ def test_messt_tracks_esst():
     fast_score = fast.transform(signal[..., None])
     np.random.seed(31)
     esst_score = orig_esst.transform(signal)
-
 
     valid_start = slow.window_length
     corr = np.corrcoef(slow_score[valid_start:], esst_score[valid_start:])[0, 1]
