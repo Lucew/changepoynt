@@ -1,4 +1,5 @@
 import typing
+import abc
 
 import numpy as np
 import scipy.fft as spfft
@@ -308,7 +309,8 @@ def block_hankel_left_matmat_direct(hankel: np.ndarray, other_matrix: np.ndarray
     hankel : ndarray, shape (p + q - 1, m, n)
         Block sequence. hankel[k] is an m x n matrix block.
 
-    A : ndarray
+    other_matrix : ndarray
+        Matrix to multiply by
         Either:
         - dense form: shape (s, p*m)
         - block form: shape (p, s, m)
@@ -379,7 +381,113 @@ def get_block_hankel_representation(time_series: np.ndarray, end_index: int, win
     return time_series[end_index-(window_number+window_length-1):end_index, :][..., None], size
 
 
-class BlockHankelRepresentation:
+class BlockHankel:
+    """
+    This class is the base class for BlockHankel matrices.
+    It mainly serves as the interface to capture numpy matrix multiplications (@) using the functions
+    __matmul__ (if a BlockHankel matrix is on the left side of the @ operator)
+    and __array_ufunc__ (if a BlockHankel is on the right side of the @ operator)
+
+    If these functions are called, the input is given to the abstract methods
+    multiply_other_from_left
+    and
+    multiply_other_from_right
+    which we expect the subclasses to implement in detail
+    """
+
+    # denote that we will have a shape
+    shape: tuple[int, ...]
+
+    @abc.abstractmethod
+    def materialize(self) -> np.ndarray:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def multiply_other_from_right(self, other_maxtrix: np.ndarray) -> np.ndarray:
+        """Subclasses should implement this method."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def multiply_other_from_left(self, other_maxtrix: np.ndarray) -> np.ndarray:
+        """Subclasses should implement this method."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def copy(self, deep: bool = False) -> "BlockHankel":
+        """Subclasses should implement this method."""
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def T(self,) -> "BlockHankel":
+        """Subclasses should implement this method. The method should transpose the matrix."""
+        raise NotImplementedError
+
+    def __matmul__(self, other) -> typing.Union[np.ndarray, "BlockHankel"]:
+        """
+        This function is called by numpy if we use an instance of the current class on the left side of
+        a matrix multiplication operator (@)
+
+        :param other: the other matrix
+        :return:
+        """
+        # right side matmul
+        if isinstance(other, np.ndarray):
+            return self.multiply_other_from_right(other)
+        if isinstance(other, BlockHankel):
+            return BlockHankelProductRepresentation(self, other)
+        else:
+            raise ValueError('At this point matmul is only with other matrices.')
+
+    def __array_ufunc__(self, ufunc, method, *args, **kwargs) -> typing.Union[np.ndarray, "BlockHankel"]:
+        """
+        This function is called by numpy, if an instance of the current class on the left side of
+        an operator where the left side is any numpy object.
+
+        Basically, numpy first checks if the left side of an operator has defined an operation for
+        both objects on the right and left. If this fails, it checks the object on the right.
+
+        :param ufunc: the function that is called on the objects
+        :param method: what type of invocation it was
+        :param args: the arguments of the function
+        :param kwargs: the keyword arguments of the function
+        :return:
+        """
+        if method != '__call__' or len(kwargs) > 0 or len(args) != 2:
+            return NotImplemented
+        if ufunc == np.matmul:
+            # left side matmul
+            if isinstance(args[0], np.ndarray) and args[1] is self:
+                return self.multiply_other_from_left(args[0])
+            else:
+                return NotImplemented
+        else:
+            return NotImplemented
+
+    def __array_function__(self, func, types, args, kwargs) -> "MultilevelBlockHankelRepresentation":
+        """
+        We currently only support concatenation.
+        https://numpy.org/neps/nep-0018-array-function-protocol.html
+        """
+        if func != np.concatenate:
+            return NotImplemented
+        if not all(issubclass(t, BlockHankel) for t in types) or not issubclass(self.__class__, BlockHankel):
+            return NotImplemented
+
+        # check the keyword arguments
+        axis = kwargs.get('axis', 0)
+        if axis not in [0, 1]:
+            raise ValueError('Concatenation only in the first two dimensions.')
+
+        # check that we only received one arg
+        if len(args) > 1:
+            raise ValueError('We only accept one non keyword argument.')
+
+        # create the list of matrices
+        return MultilevelBlockHankelRepresentation(args[0], axis)
+
+
+class BlockHankelRepresentation(BlockHankel):
     """
     This matrix represents a Block Hankel matrix
     for large matrices and fast_hankel=True it makes matrix multiplication faster:
@@ -474,67 +582,6 @@ class BlockHankelRepresentation:
         new.hankel = new.hankel.transpose((0, 2, 1))
         return new
 
-    def __matmul__(self, other):
-        """
-        This function is called by numpy if we use an instance of the current class on the left side of
-        an matrix multiplication operator (@)
-
-        :param other: the other matrix
-        :return:
-        """
-        # right side matmul
-        if isinstance(other, np.ndarray):
-            return self.multiply_other_from_right(other)
-        else:
-            raise ValueError('At this point matmul is only with other matrices.')
-
-    def __array_ufunc__(self, ufunc, method, *args, **kwargs):
-        """
-        This function is called by numpy, if an instance of the current class on the left side of
-        an operator where the left side is any numpy object.
-
-        Basically, numpy first checks if the left side of an operator has defined an operation for
-        both objects on the right and left. If this fails, it checks the object on the right.
-
-        :param ufunc: the function that is called on the objects
-        :param method: what type of invocation it was
-        :param args: the arguments of the function
-        :param kwargs: the keyword arguments of the function
-        :return:
-        """
-        if method != '__call__' or len(kwargs) > 0 or len(args) != 2:
-            return NotImplemented
-        if ufunc == np.matmul:
-            # left side matmul
-            if isinstance(args[0], np.ndarray) and args[1] is self:
-                return self.multiply_other_from_left(args[0])
-            else:
-                return NotImplemented
-        else:
-            return NotImplemented
-
-    def __array_function__(self, func, types, args, kwargs):
-        """
-        We currently only support concatenation.
-        https://numpy.org/neps/nep-0018-array-function-protocol.html
-        """
-        if func != np.concatenate:
-            return NotImplemented
-        if not all(issubclass(t, self.__class__) for t in types):
-            return NotImplemented
-
-        # check the keyword arguments
-        axis = kwargs.get('axis', 0)
-        if axis not in [0, 1]:
-            raise ValueError('Concatenation only in the first two dimensions.')
-
-        # check that we only received one arg
-        if len(args) > 1:
-            raise ValueError('We only accept one non keyword argument.')
-
-        # create the list of matrices
-        return MultilevelBlockHankelRepresentation(args[0], axis)
-
     def materialize(self) -> np.ndarray:
         """
         Explicitly build the full block Hankel matrix H for test multiplications.
@@ -560,7 +607,7 @@ class BlockHankelRepresentation:
         return hankel_matrix_full
 
 
-class MultilevelBlockHankelRepresentation:
+class MultilevelBlockHankelRepresentation(BlockHankel):
     """
     This class implements multiplication with a multilevel Block Hankel matrix, i.e., a matrix which can be divided into
     multiple parts that each have Hankel structure.
@@ -654,26 +701,6 @@ class MultilevelBlockHankelRepresentation:
 
         return new
 
-    def __matmul__(self, other):
-
-        # right side matmul
-        if isinstance(other, np.ndarray):
-            return self.multiply_other_from_right(other)
-        else:
-            raise NotImplementedError('Currently this class only support matmul with numpy arrays.')
-
-    def __array_ufunc__(self, ufunc, method, *args, **kwargs):
-        if method != '__call__' or len(kwargs) > 0 or len(args) != 2:
-            return NotImplemented
-        if ufunc == np.matmul:
-            # left side matmul
-            if isinstance(args[0], np.ndarray) and args[1] is self:
-                return self.multiply_other_from_left(args[0])
-            else:
-                return NotImplemented
-        else:
-            return NotImplemented
-
     def multiply_other_from_right(self, other: np.ndarray):
 
         # we need to create a target matrix
@@ -729,8 +756,73 @@ class MultilevelBlockHankelRepresentation:
         return np.concatenate(tuple(mat.materialize()for mat in self.matrices), axis=self.axis)
 
 
-def check_matrix_operations(hankel_typed_matrix: typing.Union[MultilevelBlockHankelRepresentation, BlockHankelRepresentation],
-                            materialized_hankel: np.ndarray, other_size: int = 10):
+class BlockHankelProductRepresentation(BlockHankel):
+    """
+    This class represents a matrix-matrix product of two hankel matrices.
+    H @ H
+    Instead of computing the product and materializing it, we keep both matrices so we have hankel property for
+    products.
+
+    See Section III-G in:
+    L. Weber and R. Lenz,
+    "Accelerating Singular Spectrum Transformation for Scalable Change Point Detection,"
+    in IEEE Access, vol. 13, pp. 213556-213577, 2025, doi: 10.1109/ACCESS.2025.3640386.
+    for details.
+    """
+
+    def __init__(self, first_hankel: BlockHankel, second_hankel: BlockHankel):
+
+        # save the matrices for keeping
+        self.first_hankel = first_hankel
+        self.second_hankel = second_hankel
+
+        # check that the dimensions match
+        if self.first_hankel.shape[1] != self.second_hankel.shape[0]:
+            raise ValueError(f'matmul: Operant shape missmatch: {self.first_hankel.shape} @ {self.second_hankel.shape} missmatch in inner dimensions.')
+
+        # save the shape
+        self.shape = (self.first_hankel.shape[0], self.second_hankel.shape[1])
+
+    def copy(self, deep: bool = False) -> "BlockHankelProductRepresentation":
+        new = self.__class__.__new__(self.__class__)
+
+        # copy the matrices
+        new.first_hankel = self.first_hankel.copy(deep=deep)
+        new.second_hankel = self.second_hankel.copy(deep=deep)
+
+        # copy the shape
+        new.shape = self.shape
+        return new
+
+    @property
+    def T(self):
+
+        # make a copy of myself
+        new = self.copy()
+
+        # switch matrix order and transpose the matrices
+        new.first_hankel, new.second_hankel = new.second_hankel.T, new.first_hankel.T
+
+        # update the shape
+        new.shape = tuple(reversed(new.shape))
+        return new
+
+    def multiply_other_from_right(self, other: np.ndarray) -> np.ndarray:
+        return self.first_hankel @ (self.second_hankel @ other)
+
+    def multiply_other_from_left(self, other: np.ndarray) -> np.ndarray:
+        return (other @ self.first_hankel) @ self.second_hankel
+
+    def materialize(self) -> np.ndarray:
+        # we need to materialize the second otherwise, we will again only create a
+        # BlockHankelProductRepresentation (the current class)
+        #
+        # materializing the second makes this a product of a BlockHankel with a np.ndarray
+        # instead of BlockHankel with BlockHankel
+        return self.first_hankel @ self.second_hankel.materialize()
+
+
+def check_matrix_operations(hankel_typed_matrix: BlockHankel, materialized_hankel: np.ndarray, other_size: int = 10):
 
     # print the checks
     print()
@@ -753,7 +845,7 @@ def check_matrix_operations(hankel_typed_matrix: typing.Union[MultilevelBlockHan
     print('Right multiplication valid?', is_close)
     assert is_close, 'Right multiplication failed.'
 
-    # create the right matrix
+    # create the left matrix
     left_matrix = np.arange(0, materialized_hankel.shape[0] * other_size)
     left_matrix = left_matrix.reshape(other_size, materialized_hankel.shape[0])
 
@@ -908,6 +1000,50 @@ def main():
         lambda: left_matrix @ np.concatenate((hankel_naive, hankel_naive), axis=1),
         number=run_num) / run_num * 1000
     print('Naive left (already constructed, unfair) multiplication took:', direct_time)
+
+    # make a print to start working on product hankel matrices
+    print()
+    print('Starting working on product Hankel matrices-------')
+
+    hankel_product_direct = hankel_direct @ hankel_direct.T
+    hankel_product_fft = hankel_fft @ hankel_fft.T
+    hankel_product_naive = hankel_naive @ hankel_naive.T
+
+    check_matrix_operations(hankel_product_direct, hankel_product_naive)
+    check_matrix_operations(hankel_product_fft, hankel_product_naive)
+
+    # create the right matrix
+    right_matrix = np.arange(0, hankel_product_naive.shape[1] * s)
+    right_matrix = right_matrix.reshape(hankel_product_naive.shape[1], s)
+
+    # create the left matrix
+    left_matrix = np.arange(0, hankel_product_naive.shape[0] * s)
+    left_matrix = left_matrix.reshape(s, hankel_product_naive.shape[0])
+
+    run_num = 100
+    fft_time = timeit.timeit(lambda: left_matrix @ (hankel_fft @ hankel_fft.T), number=run_num) / run_num * 1000
+    print('FFT left multiplication took:', fft_time)
+    direct_time = timeit.timeit(lambda: left_matrix @ (hankel_direct @ hankel_direct.T),
+                                number=run_num) / run_num * 1000
+    print('Direct left multiplication took:', direct_time)
+    direct_time = timeit.timeit(lambda: left_matrix @ (hankel_direct.materialize() @ hankel_direct.materialize().T),
+                                number=run_num) / run_num * 1000
+    print('Naive left multiplication took:', direct_time)
+    direct_time = timeit.timeit(lambda:left_matrix @ (hankel_naive @ hankel_naive.T), number=run_num) / run_num * 1000
+    print('Naive left (already constructed, unfair) multiplication took:', direct_time)
+
+    run_num = 100
+    fft_time = timeit.timeit(lambda: (hankel_fft @ hankel_fft.T) @ right_matrix, number=run_num) / run_num * 1000
+    print('FFT right multiplication took:', fft_time)
+    direct_time = timeit.timeit(lambda: (hankel_direct @ hankel_direct.T) @ right_matrix,
+                                number=run_num) / run_num * 1000
+    print('Direct right multiplication took:', direct_time)
+    direct_time = timeit.timeit(lambda: (hankel_direct.materialize() @ hankel_direct.materialize().T)  @ right_matrix,
+                                number=run_num) / run_num * 1000
+    print('Naive right multiplication took:', direct_time)
+    direct_time = timeit.timeit(lambda: (hankel_naive @ hankel_naive.T)  @ right_matrix, number=run_num) / run_num * 1000
+    print('Naive right (already constructed, unfair) multiplication took:', direct_time)
+
 
 
 if __name__ == '__main__':

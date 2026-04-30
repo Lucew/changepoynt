@@ -53,7 +53,7 @@ def test_wrong_signal_shape():
         hankel_direct = blg.BlockHankelRepresentation(signal[:, 0], p + q - 1, p, q, fast_hankel=False)
 
 
-def test_multilevel_block_hankel_fft():
+def test_multilevel_block_hankel():
 
     # make the signal
     signal, p, q, m, s = _setup_signal()
@@ -91,3 +91,52 @@ def test_wrong_axis_multilevel_block_hankel():
     # check whether we stop wrong axis
     with pytest.raises(ValueError):
         direct_multilevel = np.concatenate((hankel_direct, hankel_direct2), axis=2)
+
+
+def test_block_hankel_product():
+
+    # make the signal
+    signal, p, q, m, s = _setup_signal()
+    geng = np.random.default_rng(42)
+    signal2 = signal + geng.random(size=signal.shape)
+
+    # make the Hankel block matrix representation
+    hankel_direct = blg.BlockHankelRepresentation(signal, p + q - 1, p, q, fast_hankel=False)
+    hankel_direct2 = blg.BlockHankelRepresentation(signal2, p + q - 1, p, q, fast_hankel=False)
+    hankel_naive = hankel_direct.materialize()
+    hankel_naive2 = hankel_direct2.materialize()
+    hankel_fft = blg.BlockHankelRepresentation(signal, p + q - 1, p, q, fast_hankel=True)
+    hankel_fft2 = blg.BlockHankelRepresentation(signal2, p + q - 1, p, q, fast_hankel=True)
+
+    # compute the products
+    naive_product = hankel_naive @ hankel_naive2.T
+    direct_product = hankel_direct @ hankel_direct2.T
+    fft_product = hankel_fft @ hankel_fft2.T
+
+    # make some checks using the functions
+    blg.check_matrix_operations(fft_product, naive_product, s)
+    blg.check_matrix_operations(direct_product, naive_product, s)
+
+
+def test_block_hankel_product_wrong_shape():
+
+    # make the signal
+    signal, p, q, m, s = _setup_signal()
+    geng = np.random.default_rng(42)
+    signal2 = signal + geng.random(size=signal.shape)
+
+    # make the Hankel block matrix representation
+    hankel_direct = blg.BlockHankelRepresentation(signal, p + q - 1, p, q, fast_hankel=False)
+    hankel_direct2 = blg.BlockHankelRepresentation(signal2, p + q - 1, p, q, fast_hankel=False)
+    hankel_naive = hankel_direct.materialize()
+    hankel_naive2 = hankel_direct2.materialize()
+    hankel_fft = blg.BlockHankelRepresentation(signal, p + q - 1, p, q, fast_hankel=True)
+    hankel_fft2 = blg.BlockHankelRepresentation(signal2, p + q - 1, p, q, fast_hankel=True)
+
+    # compute the products
+    with pytest.raises(ValueError):
+        naive_product = hankel_naive @ hankel_naive2
+    with pytest.raises(ValueError):
+        direct_product = hankel_direct @ hankel_direct2
+    with pytest.raises(ValueError):
+        fft_product = hankel_fft @ hankel_fft2
