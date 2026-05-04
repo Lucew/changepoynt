@@ -37,6 +37,15 @@ def test_messt_unknown_method_raises_value_error():
         MESST(window_length=40, method="does-not-exist")
 
 
+def test_messt_smoketest():
+    allowed_methods = MESST(window_length=40).methods
+    signal, _ = _make_change_signal()
+    signal = np.concatenate([signal[..., None], signal[..., None]], axis=1)
+    for method in allowed_methods:
+        transf = MESST(window_length=40, method=method)
+        transf.transform(signal)
+
+
 def test_messt_rejects_fast_hankel_for_fbrsvd():
     with pytest.raises(ValueError):
         MESST(window_length=40, method="fbrsvd", use_fast_hankel=True)

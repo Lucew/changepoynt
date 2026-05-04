@@ -37,6 +37,16 @@ def test_msst_unknown_method_raises_value_error():
         MSST(window_length=40, method="does-not-exist")
 
 
+def test_msst_smoketest():
+    allowed_methods = MSST(window_length=40).methods
+    signal, _ = _make_change_signal()
+    signal = np.concatenate([signal[..., None], signal[..., None]], axis=1)
+    for method in allowed_methods:
+        transf = MSST(window_length=40, method=method)
+        transf.transform(signal)
+
+
+
 def test_msst_rejects_fast_hankel_for_fbrsvd():
     with pytest.raises(ValueError):
         MSST(window_length=40, method="fbrsvd", use_fast_hankel=True)
