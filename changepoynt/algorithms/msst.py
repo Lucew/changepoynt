@@ -221,7 +221,7 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
 
     # create initial vector for ika method with feedback dominant eigenvector as proposed in [2]
     # with a norm of one
-    x0 = np.random.rand(window_length)[:, None]
+    x0 = np.random.rand(window_length*time_series.shape[1])[:, None]
     x0 /= np.linalg.norm(x0)
 
     # initialize a scoring array with no values yet
