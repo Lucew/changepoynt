@@ -527,8 +527,8 @@ def _symmetric_random_singular_value_decomposition(hankel_past: np.ndarray, hank
     singvecs_past, _, _ = lg.randomized_hankel_svd(hankel_past, rank, oversampling_p=randomized_rank-rank)
 
     # compute the forward score
-    forward_score = np.sum(np.square(singvecs_past[:, :rank].T @ singvecs_future[:, 0]))
-    backward_score = np.sum(np.square(singvecs_future[:, :rank].T @ singvecs_past[:, 0]))
+    forward_score = 1-np.sum(np.square(singvecs_past[:, :rank].T @ singvecs_future[:, 0]))
+    backward_score = 1-np.sum(np.square(singvecs_future[:, :rank].T @ singvecs_past[:, 0]))
     score = (forward_score + backward_score) / 2
     return score, x0
 
