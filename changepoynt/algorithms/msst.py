@@ -167,7 +167,7 @@ class MSST(Algorithm):
 
         # set up the methods we use for the construction of the hankel matrix (either it is the fft representation
         # of the other one)
-        if use_fast_hankel and self.method not in ["rsvd", "ika", "weighted"]:
+        if use_fast_hankel and self.method not in ["rsvd", "ika", "weighted", "symmetric"]:
             raise ValueError(f'{self.method} method is not defined with use_fast_hankel=True')
 
     def transform(self, time_series: np.ndarray) -> np.ndarray:
