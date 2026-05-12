@@ -158,6 +158,9 @@ class MSST(Algorithm):
                         'weighted': partial(cpsst._weighted_random_singular_value_decomposition,
                                             rank=self.rank,
                                             randomized_rank=self.random_rank),
+                        'symmetric': partial(cpsst._symmetric_random_singular_value_decomposition,
+                                             rank=self.rank,
+                                             randomized_rank=self.random_rank),
                         }
         if self.method not in self.methods:
             raise ValueError(f'Method {self.method} not defined. Possible methods: {list(self.methods.keys())}.')
