@@ -8,9 +8,13 @@ class TestLinearAlgebra:
     def setup_method(self):
         # set a random seed
         np.random.seed(3455)
+        rng = np.random.default_rng(3455)
 
         # create a random square matrix
-        self.A = np.random.rand(50, 50)
+        # self.A = np.arange(50*50).reshape(50, 50)+ np.random.rand(50, 50)
+        U = rng.normal(size=(50, 3))
+        V = rng.normal(size=(50, 3))
+        self.A = U @ np.diag(np.array([5, 4, 3])) @ V.T + rng.normal(size=(50, 50))*1e-3
 
         # create random starting vector for the power method
         # and normalize it
@@ -79,12 +83,22 @@ class TestLinearAlgebra:
     def test_randomized_svd(self):
 
         # set a threshold for the amount of eigenvectors we want to have and compute them
-        k = 3
-        k_eigvals, k_eigvecs = lg.facebook_randomized_svd(self.A, 50)
+        k = 2
+        k_eigvals, k_eigvecs = lg.facebook_randomized_svd(self.A, 20)
 
         # compare the values
         np.testing.assert_almost_equal(k_eigvals[:k], self.singvals[:k])
         np.testing.assert_almost_equal(np.abs(k_eigvecs[:, :k]), np.abs(self.singvecs[:, :k]))
+
+    def test_own_randomized_svd(self):
+
+        # set a threshold for the amount of eigenvectors we want to have and compute them
+        k = 2
+        k_left_singvec, k_singvals, _ = lg.randomized_hankel_svd(self.A, k, 2, oversampling_p=18)
+
+        # compare the values
+        np.testing.assert_almost_equal(k_singvals[:k], self.singvals[:k])
+        np.testing.assert_almost_equal(np.abs(k_left_singvec[:, :k]), np.abs(self.singvecs[:, :k]))
 
     def test_right_hankel_product(self):
         # make the multiplications

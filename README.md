@@ -43,8 +43,7 @@ Current algorithms come from the field of:
 
 
 The package is aimed at execution performance (using JIT compilation and standing on the shoulders of giants like numpy 
-and scipy) while also keeping code readable and maintainable. This includes comments as well as architectural choices. 
-This might not be perfect, but we are trying!
+and scipy) while also keeping code readable and maintainable. This includes comments as well as architectural choices.
 
  
 
@@ -156,7 +155,9 @@ are currently under development. An overview with sources can be seen here:
 | [Fast SST](https://github.com/Lucew/changepoynt/blob/master/docs/fast-sst.md)     | [Weber et al.](https://doi.org/10.1109/ACCESS.2025.3640386)                        | Stable  :heavy_check_mark:  |
 | IKA-SST                                                                           | [Idé](https://epubs.siam.org/doi/abs/10.1137/1.9781611972771.54)                   | Stable  :heavy_check_mark:  |
 | [Fast IKA-SST](https://github.com/Lucew/changepoynt/blob/master/docs/fast-sst.md) | [Weber et al.](https://doi.org/10.1109/ACCESS.2025.3640386)                    | Stable  :heavy_check_mark:  |     
+| Multivariate (IKA-)SST (MSST)                                                     |                    | Stable  :heavy_check_mark:  |
 | ESST                                                                              | [Boelter & Weber et al.](https://ntrs.nasa.gov/citations/20250002705)              | Stable :heavy_check_mark:   |
+| Multivariate ESST (MESST)                                                         |                    | Stable  :heavy_check_mark:  |
 | RuLSIF                                                                            | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270)  | Stable  :heavy_check_mark:  |
 | uLSIF                                                                             | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270)  | Stable  :heavy_check_mark:  |
 | KLIEP                                                                             | [Liu et al.](https://www.sciencedirect.com/science/article/pii/S0893608013000270)  | Planned                     |

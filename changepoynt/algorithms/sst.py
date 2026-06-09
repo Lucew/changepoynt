@@ -143,6 +143,11 @@ class SST(Algorithm):
         # 2) the current hankel matrix and
         # 3) the feedback vector (e.g. for dominant eigenvector feedback)
         # all other parameter should be specified as values in the partial lambda function
+        #
+        # We recommend using:
+        # 1) rsvd
+        # 2) ika if speed is a concern
+        # 3) weighted if noise is low
         self.methods = {'ika': partial(_implicit_krylov_approximation,
                                        rank=self.rank,
                                        lanczos_rank=self.lanczos_rank),
@@ -161,13 +166,16 @@ class SST(Algorithm):
                         'weighted': partial(_weighted_random_singular_value_decomposition,
                                             rank=self.rank,
                                             randomized_rank=self.random_rank),
+                        'symmetric': partial(_symmetric_random_singular_value_decomposition,
+                                            rank=self.rank,
+                                            randomized_rank=self.random_rank),
                         }
         if self.method not in self.methods:
             raise ValueError(f'Method {self.method} not defined. Possible methods: {list(self.methods.keys())}.')
 
         # set up the methods we use for the construction of the hankel matrix (either it is the fft representation
         # of the other one)
-        if use_fast_hankel and self.method not in ["rsvd", "ika", "weighted"]:
+        if use_fast_hankel and self.method not in ["rsvd", "ika", "weighted", "symmetric"]:
             raise ValueError(f'{self.method} method is not defined with use_fast_hankel=True')
         self.hankel_construction = {
             False: lg.compile_hankel,
@@ -483,6 +491,45 @@ def _weighted_random_singular_value_decomposition(hankel_past: np.ndarray, hanke
     # compute a weighted mean of the scores
     s2 = singval_future**2
     score = np.sum((1.0 - inside) * s2) / np.sum(s2)
+    return score, x0
+
+
+def _symmetric_random_singular_value_decomposition(hankel_past: np.ndarray, hankel_future: np.ndarray, x0: np.ndarray,
+                                                   rank: int, randomized_rank: int):
+    """
+    This function implements the idea of
+
+    Idé, Tsuyoshi, and Keisuke Inoue.
+    "Knowledge discovery from heterogeneous dynamic systems using change-point correlations."
+    Proceedings of the 2005 SIAM international conference on data mining.
+    Society for Industrial and Applied Mathematics, 2005.
+
+    but uses the randomized svd decomposition by
+
+    Halko, Nathan, Per-Gunnar Martinsson, and Joel A. Tropp.
+    "Finding structure with randomness: Probabilistic algorithms for constructing approximate matrix decompositions."
+    SIAM review 53.2 (2011): 217-288.
+
+    !! It uses more than just the future vector. Instead, it computes a weighted score using multiple vectors
+
+    :param hankel_past: the hankel matrix H1 before the change point
+    :param hankel_future: the hankel matrix H2 after the change point
+    :param x0: the initialization value for the power method applied to H2 to find the dominant eigenvector
+    :param rank: the amount of (approximated) eigenvectors as subspace of H1
+    :param randomized_rank: the rank of the approximation used to construct the noise matrix
+    :return: the change point score, the new dominant eigenvector of H2 for the feedback into the next H2
+    """
+
+    # compute the biggest eigenvector of the hankel matrix after the possible change point (h2)
+    singvecs_future, _, _ = lg.randomized_hankel_svd(hankel_future, rank, oversampling_p=randomized_rank-rank)
+
+    # compute the eigenvectors of the past hankel matrix
+    singvecs_past, _, _ = lg.randomized_hankel_svd(hankel_past, rank, oversampling_p=randomized_rank-rank)
+
+    # compute the forward score
+    forward_score = 1-np.sum(np.square(singvecs_past[:, :rank].T @ singvecs_future[:, 0]))
+    backward_score = 1-np.sum(np.square(singvecs_future[:, :rank].T @ singvecs_past[:, 0]))
+    score = (forward_score + backward_score) / 2
     return score, x0
 
 
