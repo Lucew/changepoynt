@@ -5,13 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 dynamic = ["dependencies", "optional-dependencies"]
 name = "changepoynt"
-version = "0.1.2"
+version = "0.2.0"
 authors = [
   { name="Lucas Weber", email="weber-lucas@web.de" },
 ]
 description = "Change point / changepoint detection for time series in Python (Singular Spectrum Transformation - SST, IKA-SST, ulSIF, RuLSIF, KLIEP, FLUSS, FLOSS, etc.). Focus on efficient implementation and readable code."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 license = "BSD-2-Clause"
 classifiers = [
     "Programming Language :: Python :: 3",
