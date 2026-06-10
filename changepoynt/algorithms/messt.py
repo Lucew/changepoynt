@@ -2,7 +2,6 @@ import os
 from typing import Callable
 from functools import partial
 
-import numba as nb
 import numpy as np
 
 from changepoynt.algorithms.base_algorithm import Algorithm
@@ -26,7 +25,7 @@ class MESST(Algorithm):
 
     def __init__(self, window_length: int, n_windows: int = None, lag: int = None, rank: int = 5,
                  scale: bool = True, method: str = 'rsvd', random_rank: int = None, scoring_step: int = 1,
-                 use_fast_hankel: bool = False, threads: int = None) -> None:
+                 use_fast_hankel: bool = False) -> None:
         """
         Experimental change point detection method evaluation the prevalence of change points within a signal
         by comparing the difference in eigenvectors between to points in time.
@@ -75,7 +74,6 @@ class MESST(Algorithm):
         self.scoring_step = scoring_step
         self.use_fast_hankel = use_fast_hankel
         self.method = method
-        self.threads = threads
 
         # set some default values when they have not been specified
         if self.n_windows is None:
@@ -87,12 +85,10 @@ class MESST(Algorithm):
             # compute the rank as specified in [3] and
             # https://scikit-learn.org/stable/modules/generated/sklearn.utils.extmath.randomized_svd.html
             self.random_rank = min(self.rank + 10, self.window_length, self.n_windows)
-        if self.threads is None:
-            self.threads = os.cpu_count()//2
 
         # specify the methods and their corresponding functions as lambda functions expecting only the hankel matrix
         self.methods = {'rsvd': partial(esst.left_entropy, rank=self.rank, random_rank=self.random_rank,
-                                        threads=self.threads, method=self.method)}
+                                        method=self.method)}
         if self.method not in self.methods:
             raise ValueError(f'Method {self.method} not defined. Possible methods: {list(self.methods.keys())}.')
 
