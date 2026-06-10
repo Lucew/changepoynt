@@ -3,13 +3,13 @@ from functools import partial
 
 import numpy as np
 
-from changepoynt.algorithms.base_algorithm import Algorithm
 from changepoynt.utils import normalization
 import changepoynt.utils.block_linalg as blg
 import changepoynt.algorithms.esst as esst
+from changepoynt.algorithms.base_algorithm import SingularSubspaceAlgorithm
 
 
-class MESST(Algorithm):
+class MESST(SingularSubspaceAlgorithm):
     """
     This class implements the Multivariate Enhanced Singular Spectrum Transformation (MESST)
 
@@ -96,6 +96,9 @@ class MESST(Algorithm):
         if use_fast_hankel and self.method != 'rsvd':
             raise ValueError(f'method {self.method} is not defined with use_fast_hankel=True')
 
+    def compute_offset(self) -> int:
+        return self.n_windows + self.lag
+
     def transform(self, time_series: np.ndarray) -> np.ndarray:
         """
         This function calculates the anomaly score for each sample within the time series.
@@ -110,7 +113,7 @@ class MESST(Algorithm):
         assert time_series.ndim > 1, "Time series needs to be an N-D array. Currently it is 1-D."
 
         # compute the starting point of the scoring (past and future hankel need to fit)
-        starting_point = self.window_length + self.n_windows + self.lag
+        starting_point = self.covered_regions()[0]
         assert starting_point < time_series.shape[0], "The time series is too short to score any points."
 
         # scale the time series (or just copy it if already scaled)
@@ -121,12 +124,14 @@ class MESST(Algorithm):
 
         # get the different methods
         scoring_function = self.methods[self.method]
-        return _transform(time_series, starting_point, self.window_length, self.n_windows, self.lag,
-                          self.scoring_step, scoring_function, self.use_fast_hankel)
+        return _transform(time_series=time_series, start_idx=starting_point, offset=self.compute_offset(),
+                          window_length=self.window_length, n_windows=self.n_windows, lag=self.lag,
+                          scoring_step=self.scoring_step, scoring_function=scoring_function,
+                          use_fast_hankel=self.use_fast_hankel)
 
 
-def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_windows: int, lag: int, scoring_step: int,
-               scoring_function: Callable, use_fast_hankel: bool) -> np.ndarray:
+def _transform(time_series: np.ndarray, start_idx: int, offset: int, window_length: int, n_windows: int, lag: int,
+               scoring_step: int, scoring_function: Callable, use_fast_hankel: bool) -> np.ndarray:
     """
     Compute heavy and hopefully jit compilable score computation for the SST method. It does not do any parameter
     checking and can throw cryptic errors. It's only used for internal use as a private function.
@@ -140,8 +145,6 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
     # initialize a scoring array with no values yet
     score = np.zeros((time_series.shape[0],))
 
-    # compute the offset
-    offset = (n_windows + lag)
 
     # iterate over all the values in the signal starting at start_idx computing the change point score
     for idx in range(start_idx, time_series.shape[0], scoring_step):

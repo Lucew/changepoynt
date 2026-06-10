@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import pytest
 
@@ -71,7 +73,7 @@ def test_messt_score_is_zero_before_first_possible_output():
     np.random.seed(7)
     score = detector.transform(signal[..., None])
 
-    expected_first_scored_idx = detector.window_length
+    expected_first_scored_idx = detector.first_score_position
     np.testing.assert_allclose(score[:expected_first_scored_idx], 0.0)
 
 
@@ -128,3 +130,30 @@ def test_messt_tracks_esst():
     corr = np.corrcoef(fast_score[valid_start:], esst_score[valid_start:])[0, 1]
     assert np.isfinite(corr)
     assert corr > 0.95
+
+
+def test_esst_runtime_estimation():
+    signal, _ = _make_change_signal()
+    ws = 30
+    slow = MESST(window_length=ws, n_windows=ws, lag=ws // 2, rank=5, method="rsvd", use_fast_hankel=False)
+    fast = MESST(window_length=ws, n_windows=ws, lag=ws // 2, rank=5, method="rsvd", use_fast_hankel=True)
+    orig_esst = cpesst.ESST(window_length=ws, n_windows=ws, lag=ws // 2, rank=5, method="rsvd", use_fast_hankel=False)
+    signal = signal[..., None]
+
+    np.random.seed(31)
+    runtime_estimation, _ = slow.estimate_runtime(signal, verbose=True)
+    start = time.perf_counter()
+    slow_score = slow.transform(signal)
+    duration = time.perf_counter() - start
+
+    # check if we were way off
+    assert runtime_estimation * 0.5 < duration < runtime_estimation * 1.5
+
+    np.random.seed(31)
+    runtime_estimation, _ = fast.estimate_runtime(signal, verbose=True)
+    start = time.perf_counter()
+    fast_score = fast.transform(signal)
+    duration = time.perf_counter() - start
+
+    # check if we were way off
+    assert runtime_estimation * 0.5 < duration < runtime_estimation * 1.5

@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import pytest
 
@@ -56,7 +58,7 @@ def test_esst_rejects_non_1d_input():
 
 def test_esst_rejects_too_short_signal():
     detector = ESST(window_length=40, n_windows=20, lag=20, method="rsvd")
-    too_short = np.linspace(0.0, 1.0, 80)
+    too_short = np.linspace(0.0, 1.0, 78)
     with pytest.raises(AssertionError):
         detector.transform(too_short)
 
@@ -67,7 +69,7 @@ def test_esst_score_is_zero_before_first_possible_output():
     np.random.seed(7)
     score = detector.transform(signal)
 
-    expected_first_scored_idx = detector.window_length
+    expected_first_scored_idx = detector.first_score_position
     np.testing.assert_allclose(score[:expected_first_scored_idx], 0.0)
 
 
@@ -114,3 +116,27 @@ def test_esst_fast_hankel_tracks_reference_implementation():
     corr = np.corrcoef(slow_score[valid_start:], fast_score[valid_start:])[0, 1]
     assert np.isfinite(corr)
     assert corr > 0.95
+
+
+def test_esst_runtime_estimation():
+    signal, _ = _make_frequency_change_signal()
+    slow = ESST(window_length=40, n_windows=20, lag=20, rank=2, method="rsvd", use_fast_hankel=False)
+    fast = ESST(window_length=40, n_windows=20, lag=20, rank=2, method="rsvd", use_fast_hankel=True)
+
+    np.random.seed(31)
+    runtime_estimation, _ = slow.estimate_runtime(signal, verbose=True)
+    start = time.perf_counter()
+    slow_score = slow.transform(signal)
+    duration = time.perf_counter() - start
+
+    # check if we were way off
+    assert runtime_estimation * 0.5 < duration < runtime_estimation * 1.5
+
+    np.random.seed(31)
+    runtime_estimation, _ = fast.estimate_runtime(signal, verbose=True)
+    start = time.perf_counter()
+    fast_score = fast.transform(signal)
+    duration = time.perf_counter() - start
+
+    # check if we were way off
+    assert runtime_estimation * 0.5 < duration < runtime_estimation * 1.5

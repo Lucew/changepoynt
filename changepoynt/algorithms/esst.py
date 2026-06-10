@@ -4,12 +4,12 @@ from functools import partial
 import numpy as np
 import fbpca
 
-from changepoynt.algorithms.base_algorithm import Algorithm
 from changepoynt.utils import normalization
 from changepoynt.utils import linalg as lg
+from changepoynt.algorithms.base_algorithm import SingularSubspaceAlgorithm
 
 
-class ESST(Algorithm):
+class ESST(SingularSubspaceAlgorithm):
     """
     This class implements an own idea for change point detection.
 
@@ -118,6 +118,9 @@ class ESST(Algorithm):
         if self.use_fast_hankel and self.mitigate_offset:
             raise ValueError(f'use_fast_hankel={self.use_fast_hankel} is not allowed when mitigate_offset={self.mitigate_offset}. You can only use one or none of them.')
 
+    def compute_offset(self) -> int:
+        return self.n_windows + self.lag
+
     def transform(self, time_series: np.ndarray) -> np.ndarray:
         """
         This function calculates the anomaly score for each sample within the time series.
@@ -135,7 +138,7 @@ class ESST(Algorithm):
         assert time_series.shape[0] > self.window_length, 'Time series needs to be longer than window length.'
 
         # compute the starting point of the scoring (past and future hankel need to fit)
-        starting_point = self.window_length + self.n_windows + self.lag
+        starting_point = self.covered_regions()[0]
         assert starting_point < time_series.shape[0], "The time series is too short to score any points."
 
         # scale the time series (or just copy it if already scaled)
@@ -147,12 +150,14 @@ class ESST(Algorithm):
         # get the different methods
         scoring_function = self.methods[self.method]
         hankel_function = self.hankel_construction[self.use_fast_hankel]
-        return _transform(time_series, starting_point, self.window_length, self.n_windows, self.lag,
-                          self.scoring_step, scoring_function, hankel_function, self.mitigate_offset)
+        return _transform(time_series=time_series, start_idx=starting_point, offset=self.compute_offset(),
+                          window_length=self.window_length, n_windows=self.n_windows, lag=self.lag,
+                          scoring_step=self.scoring_step, scoring_function=scoring_function,
+                          hankel_construction_function=hankel_function, mitigate_offset=self.mitigate_offset)
 
 
-def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_windows: int, lag: int, scoring_step: int,
-               scoring_function: Callable, hankel_construction_function: Callable,
+def _transform(time_series: np.ndarray, start_idx: int, offset: int, window_length: int, n_windows: int, lag: int,
+               scoring_step: int, scoring_function: Callable, hankel_construction_function: Callable,
                mitigate_offset: bool = False) -> np.ndarray:
     """
     Compute heavy and hopefully jit compilable score computation for the SST method. It does not do any parameter
@@ -166,9 +171,6 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
 
     # initialize a scoring array with no values yet
     score = np.zeros_like(time_series)
-
-    # compute the offset
-    offset = (n_windows + lag)
 
     # iterate over all the values in the signal starting at start_idx computing the change point score
     for idx in range(start_idx, time_series.shape[0], scoring_step):
