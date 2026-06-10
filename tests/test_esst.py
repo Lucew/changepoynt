@@ -124,7 +124,7 @@ def test_esst_runtime_estimation():
     fast = ESST(window_length=40, n_windows=20, lag=20, rank=2, method="rsvd", use_fast_hankel=True)
 
     np.random.seed(31)
-    runtime_estimation, _ = slow.estimate_runtime(signal, verbose=True)
+    runtime_estimation, _ = slow.estimate_runtime(signal, verbose=True, steps=100)
     start = time.perf_counter()
     slow_score = slow.transform(signal)
     duration = time.perf_counter() - start
@@ -133,7 +133,7 @@ def test_esst_runtime_estimation():
     assert runtime_estimation * 0.5 < duration < runtime_estimation * 1.5
 
     np.random.seed(31)
-    runtime_estimation, _ = fast.estimate_runtime(signal, verbose=True)
+    runtime_estimation, _ = fast.estimate_runtime(signal, verbose=True, steps=100)
     start = time.perf_counter()
     fast_score = fast.transform(signal)
     duration = time.perf_counter() - start

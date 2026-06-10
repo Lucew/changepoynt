@@ -141,7 +141,7 @@ def test_esst_runtime_estimation():
     signal = signal[..., None]
 
     np.random.seed(31)
-    runtime_estimation, _ = slow.estimate_runtime(signal, verbose=True)
+    runtime_estimation, _ = slow.estimate_runtime(signal, verbose=True, steps=100)
     start = time.perf_counter()
     slow_score = slow.transform(signal)
     duration = time.perf_counter() - start
@@ -150,7 +150,7 @@ def test_esst_runtime_estimation():
     assert runtime_estimation * 0.5 < duration < runtime_estimation * 1.5
 
     np.random.seed(31)
-    runtime_estimation, _ = fast.estimate_runtime(signal, verbose=True)
+    runtime_estimation, _ = fast.estimate_runtime(signal, verbose=True, steps=100)
     start = time.perf_counter()
     fast_score = fast.transform(signal)
     duration = time.perf_counter() - start
