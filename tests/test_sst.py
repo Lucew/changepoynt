@@ -1,3 +1,5 @@
+import time
+
 import pytest
 import numpy as np
 import changepoynt.algorithms.sst as ssts
@@ -161,7 +163,7 @@ def test_sst_score_is_zero_before_first_possible_output():
     np.random.seed(7)
     score = detector.transform(signal)
 
-    expected_first_scored_idx = detector.window_length + detector.n_windows // 2
+    expected_first_scored_idx = detector.first_score_position
     np.testing.assert_allclose(score[:expected_first_scored_idx], 0.0)
 
 
@@ -178,7 +180,7 @@ def test_sst_detects_frequency_change_near_boundary(method: str):
         score,
         center=change_idx,
         half_width=140,
-        valid_start=detector.window_length + detector.n_windows // 2,
+        valid_start=detector.first_score_position,
     )
 
     assert neighborhood.size > 0
@@ -214,6 +216,30 @@ def test_sst_fast_hankel_tracks_reference_implementation():
     corr = np.corrcoef(slow_score[valid_start:], fast_score[valid_start:])[0, 1]
     assert np.isfinite(corr)
     assert corr > 0.95
+
+
+def test_sst_runtime_estimation():
+    signal, _ = _make_frequency_change_signal()
+    slow = ssts.SST(window_length=40, n_windows=40, lag=10, rank=2, method="rsvd", use_fast_hankel=False)
+    fast = ssts.SST(window_length=40, n_windows=40, lag=10, rank=2, method="rsvd", use_fast_hankel=True)
+
+    np.random.seed(31)
+    runtime_estimation, _ = slow.estimate_runtime(signal, verbose=True, steps=100)
+    start = time.perf_counter()
+    slow_score = slow.transform(signal)
+    duration = time.perf_counter() - start
+
+    # check if we were way off
+    assert runtime_estimation * 0.01 < duration < runtime_estimation * 10
+
+    np.random.seed(31)
+    runtime_estimation, _ = fast.estimate_runtime(signal, verbose=True, steps=100)
+    start = time.perf_counter()
+    fast_score = fast.transform(signal)
+    duration = time.perf_counter() - start
+
+    # check if we were way off
+    assert runtime_estimation * 0.01 < duration < runtime_estimation * 10
 
 
 if __name__ == "__main__":

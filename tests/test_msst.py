@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import pytest
 
@@ -128,3 +130,28 @@ def test_msst_tracks_esst():
     corr = np.corrcoef(fast_score[valid_start:], esst_score[valid_start:])[0, 1]
     assert np.isfinite(corr)
     assert corr > 0.95
+
+
+def test_msst_runtime_estimation():
+    signal, _ = _make_change_signal()
+    slow = MSST(window_length=40, n_windows=20, lag=20, rank=2, method="rsvd", use_fast_hankel=False)
+    fast = MSST(window_length=40, n_windows=20, lag=20, rank=2, method="rsvd", use_fast_hankel=True)
+    signal = signal[..., None]
+
+    np.random.seed(31)
+    runtime_estimation, _ = slow.estimate_runtime(signal, verbose=True, steps=100)
+    start = time.perf_counter()
+    slow_score = slow.transform(signal)
+    duration = time.perf_counter() - start
+
+    # check if we were way off
+    assert runtime_estimation * 0.01 < duration < runtime_estimation * 10
+
+    np.random.seed(31)
+    runtime_estimation, _ = fast.estimate_runtime(signal, verbose=True, steps=100)
+    start = time.perf_counter()
+    fast_score = fast.transform(signal)
+    duration = time.perf_counter() - start
+
+    # check if we were way off
+    assert runtime_estimation * 0.01 < duration < runtime_estimation * 10

@@ -1,18 +1,15 @@
-import os
-
-import matplotlib.pyplot as plt
-import numpy as np
 from typing import Callable
 from functools import partial
-from changepoynt.algorithms.base_algorithm import Algorithm
+
+import numpy as np
+import fbpca
+
 from changepoynt.utils import normalization
 from changepoynt.utils import linalg as lg
-import fbpca
-import multiprocessing as mp
-import numba as nb
+from changepoynt.algorithms.base_algorithm import SingularSubspaceAlgorithm
 
 
-class ESST(Algorithm):
+class ESST(SingularSubspaceAlgorithm):
     """
     This class implements an own idea for change point detection.
 
@@ -27,7 +24,7 @@ class ESST(Algorithm):
 
     def __init__(self, window_length: int, n_windows: int = None, lag: int = None, rank: int = 5,
                  scale: bool = True, method: str = 'fbrsvd', random_rank: int = None, scoring_step: int = 1,
-                 use_fast_hankel: bool = False, threads: int = None, mitigate_offset: bool = False) -> None:
+                 use_fast_hankel: bool = False, mitigate_offset: bool = False) -> None:
         """
         Experimental change point detection method evaluation the prevalence of change points within a signal
         by comparing the difference in eigenvectors between to points in time.
@@ -78,7 +75,6 @@ class ESST(Algorithm):
         self.scoring_step = scoring_step
         self.use_fast_hankel = use_fast_hankel
         self.method = method
-        self.threads = threads
         self.mitigate_offset = mitigate_offset
 
         # set some default values when they have not been specified
@@ -91,14 +87,12 @@ class ESST(Algorithm):
             # compute the rank as specified in [3] and
             # https://scikit-learn.org/stable/modules/generated/sklearn.utils.extmath.randomized_svd.html
             self.random_rank = min(self.rank + 10, self.window_length, self.n_windows)
-        if self.threads is None:
-            self.threads = os.cpu_count()//2
 
         # specify the methods and their corresponding functions as lambda functions expecting only the hankel matrix
         self.methods = {'rsvd': partial(left_entropy, rank=self.rank, random_rank=self.random_rank,
-                                        method='rsvd', threads=self.threads),
+                                        method='rsvd'),
                         'fbrsvd': partial(left_entropy, rank=self.rank, random_rank=self.random_rank,
-                                          method='fbrsvd', threads=self.threads)}
+                                          method='fbrsvd')}
         if self.method not in self.methods:
             raise ValueError(f'Method {self.method} not defined. Possible methods: {list(self.methods.keys())}.')
 
@@ -123,7 +117,9 @@ class ESST(Algorithm):
         # When using the FFT convolution, we cannot subtract column wise mean values
         if self.use_fast_hankel and self.mitigate_offset:
             raise ValueError(f'use_fast_hankel={self.use_fast_hankel} is not allowed when mitigate_offset={self.mitigate_offset}. You can only use one or none of them.')
-        # TODO: Create tests for the ESST
+
+    def compute_offset(self) -> int:
+        return self.n_windows + self.lag
 
     def transform(self, time_series: np.ndarray) -> np.ndarray:
         """
@@ -142,7 +138,7 @@ class ESST(Algorithm):
         assert time_series.shape[0] > self.window_length, 'Time series needs to be longer than window length.'
 
         # compute the starting point of the scoring (past and future hankel need to fit)
-        starting_point = self.window_length + self.n_windows + self.lag
+        starting_point = self.covered_regions()[0]
         assert starting_point < time_series.shape[0], "The time series is too short to score any points."
 
         # scale the time series (or just copy it if already scaled)
@@ -154,12 +150,14 @@ class ESST(Algorithm):
         # get the different methods
         scoring_function = self.methods[self.method]
         hankel_function = self.hankel_construction[self.use_fast_hankel]
-        return _transform(time_series, starting_point, self.window_length, self.n_windows, self.lag,
-                          self.scoring_step, scoring_function, hankel_function, self.mitigate_offset)
+        return _transform(time_series=time_series, start_idx=starting_point, offset=self.compute_offset(),
+                          window_length=self.window_length, n_windows=self.n_windows, lag=self.lag,
+                          scoring_step=self.scoring_step, scoring_function=scoring_function,
+                          hankel_construction_function=hankel_function, mitigate_offset=self.mitigate_offset)
 
 
-def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_windows: int, lag: int, scoring_step: int,
-               scoring_function: Callable, hankel_construction_function: Callable,
+def _transform(time_series: np.ndarray, start_idx: int, offset: int, window_length: int, n_windows: int, lag: int,
+               scoring_step: int, scoring_function: Callable, hankel_construction_function: Callable,
                mitigate_offset: bool = False) -> np.ndarray:
     """
     Compute heavy and hopefully jit compilable score computation for the SST method. It does not do any parameter
@@ -173,9 +171,6 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
 
     # initialize a scoring array with no values yet
     score = np.zeros_like(time_series)
-
-    # compute the offset
-    offset = (n_windows + lag)
 
     # iterate over all the values in the signal starting at start_idx computing the change point score
     for idx in range(start_idx, time_series.shape[0], scoring_step):
@@ -220,7 +215,7 @@ def left_right_diff(left_eigenvectors: np.ndarray):
     return np.mean(left_eigenvectors[:, :n]-left_eigenvectors[:, n:], axis=1)
 
 
-def left_entropy(hankel: np.ndarray, rank: int, random_rank: int, method: str, threads: int) -> float:
+def left_entropy(hankel: np.ndarray, rank: int, random_rank: int, method: str) -> float:
     """
     Entropy Singular Spectrum Transformation.
 
@@ -232,8 +227,6 @@ def left_entropy(hankel: np.ndarray, rank: int, random_rank: int, method: str, t
     :return: the change point score, the input vector x0
     """
     # compute the left and right eigenvectors using the randomized svd for fast computation
-    threads_before = nb.get_num_threads()
-    nb.set_num_threads(threads)
     if method == 'fbrsvd':
         right_eigenvectors, eigenvalues, left_eigenvectors = fbpca.pca(hankel, rank, True)
     elif method == 'rsvd':
@@ -241,7 +234,6 @@ def left_entropy(hankel: np.ndarray, rank: int, random_rank: int, method: str, t
                                                                                       oversampling_p=random_rank - rank)
     else:
         raise NotImplementedError(f'Method {method} is not available.')
-    nb.set_num_threads(threads_before)
 
     # shift the left eigenvectors up
     left_eigenvectors = left_eigenvectors - np.min(left_eigenvectors, axis=1)[:, None] + 1

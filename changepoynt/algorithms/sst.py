@@ -4,10 +4,10 @@ from changepoynt.utils import linalg as lg
 from changepoynt.utils import normalization
 from typing import Callable
 from functools import partial
-from changepoynt.algorithms.base_algorithm import Algorithm
+from changepoynt.algorithms.base_algorithm import SingularSubspaceAlgorithm
 
 
-class SST(Algorithm):
+class SST(SingularSubspaceAlgorithm):
     """
     This class implements all the utility and functionality necessary to compute the SST change point detection
     algorithm as described in:
@@ -198,6 +198,9 @@ class SST(Algorithm):
         # check whether the method is correct
         assert self.method in self.methods, f'Specified method {self.method} is not available in {self.methods.keys()}.'
 
+    def compute_offset(self) -> int:
+        return self.n_windows // 2 + self.lag
+
     def transform(self, time_series: np.ndarray) -> np.ndarray:
         """
         This function calculates the anomaly score for each sample within the time series, starting from an initial
@@ -216,7 +219,7 @@ class SST(Algorithm):
         assert time_series.ndim == 1, "Time series needs to be an 1D array."
 
         # compute the starting point of the scoring (past and future hankel need to fit)
-        starting_point = self.window_length + self.n_windows + self.lag
+        starting_point = self.covered_regions()[0]
         assert starting_point < time_series.shape[0], "The time series is too short to score any points."
 
         # scale the time series (or just copy it if already scaled)
@@ -230,14 +233,15 @@ class SST(Algorithm):
         hankel_function = self.hankel_construction[self.use_fast_hankel]
 
         # start the scaling itself by calling the jit compiled staticmethod and return the result
-        score = _transform(time_series=time_series, start_idx=starting_point, window_length=self.window_length,
-                           n_windows=self.n_windows, lag=self.lag, scoring_step=self.scoring_step,
-                           scoring_function=scoring_function, hankel_construction_function=hankel_function,
+        score = _transform(time_series=time_series, start_idx=starting_point, offset=self.compute_offset(),
+                           window_length=self.window_length, n_windows=self.n_windows, lag=self.lag,
+                           scoring_step=self.scoring_step, scoring_function=scoring_function,
+                           hankel_construction_function=hankel_function,
                            mitigate_offset=self.mitigate_offset)
         return score
 
 
-def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_windows: int, lag: int, scoring_step: int,
+def _transform(time_series: np.ndarray, start_idx: int, offset: int, window_length: int, n_windows: int, lag: int, scoring_step: int,
                scoring_function: Callable, hankel_construction_function: Callable,
                mitigate_offset: bool = False) -> np.ndarray:
     """
@@ -260,9 +264,6 @@ def _transform(time_series: np.ndarray, start_idx: int, window_length: int, n_wi
 
     # initialize a scoring array with no values yet
     score = np.zeros_like(time_series)
-
-    # make an offset for the data construction
-    offset = n_windows // 2 + lag
 
     # iterate over all the values in the signal starting at start_idx computing the change point score
     for idx in range(start_idx, time_series.shape[0], scoring_step):
@@ -592,7 +593,7 @@ def _naive_singular_value_decomposition_updated_score(hankel_past: np.ndarray, h
 
 def main():
     """This function is not intended for users, but for quick testing during development."""
-    from time import time
+    from time import perf_counter
 
     # make synthetic step function
     np.random.seed(123)
@@ -608,11 +609,14 @@ def main():
     rsvd_sst = SST(31, method='rsvd', use_fast_hankel=True)
     fbrsvd_sst = SST(31, method='fbrsvd')
 
+    # make some runtime checks
+    ika_sst.estimate_runtime(x, verbose=True)
+
     # make the scoring
-    start = time()
+    start = perf_counter()
     ika_sst.transform(x)
-    # print((time() - start) / (length * 3))
-    print(svd_sst.transform(x))
+    print((perf_counter() - start))
+    # print(svd_sst.transform(x))
     rsvd_sst.transform(x)
     fbrsvd_sst.transform(x)
 
