@@ -604,7 +604,7 @@ def main():
     x += np.random.rand(x.size)
 
     # create the sst method
-    ika_sst = SST(31, method='ika', use_fast_hankel=True)
+    ika_sst = SST(31, method='ika', use_fast_hankel=True, scoring_step=3)
     svd_sst = SST(31, method='svd')
     rsvd_sst = SST(31, method='rsvd', use_fast_hankel=True)
     fbrsvd_sst = SST(31, method='fbrsvd')

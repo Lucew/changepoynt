@@ -70,7 +70,7 @@ class SingularSubspaceAlgorithm(Algorithm):
         total_covered_region = self.covered_regions()[0]
 
         # get the number of steps necessary for the whole time series
-        processing_steps = signal.shape[0] - total_covered_region
+        processing_steps = (signal.shape[0] - total_covered_region)//self.scoring_step
 
         # check whether the signal is long enough
         if total_covered_region > signal.shape[0]:
