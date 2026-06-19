@@ -1,4 +1,5 @@
 # Python Changepoint Detection (changepoynt)
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://lucew.github.io/changepoynt/)
 [![PyPI version](https://img.shields.io/pypi/v/changepoynt?color=%2376519B)](https://pypi.org/project/changepoynt/)
 [![License](https://img.shields.io/pypi/l/changepoynt?color=%2376519B)](https://opensource.org/licenses/BSD-2-Clause)
 [![python](https://img.shields.io/pypi/pyversions/changepoynt?color=%2376519B)](https://pypi.org/project/changepoynt/)
@@ -23,6 +24,7 @@ uv pip install changepoynt
  - [Examples](#examples)
  - [Algorithms](#algorithms)
  - [Installation](#installation)
+ - [Documentation](#documentation)
  - [Contributing](#contributing)
  - [Known Issues](#known-issues)
  - [Outlook](#outlook)
@@ -138,6 +140,13 @@ we aim to be open-source and try our best to guarantee that all the code we use 
 You can also install the code from source using the following line
 
     pip install git+https://github.com/Lucew/changepoynt.git
+
+# Documentation <a id="documentation"></a>
+
+The complete documentation is available at [lucew.github.io/changepoynt](https://lucew.github.io/changepoynt/).
+
+It includes installation instructions, algorithm references, practical user guides,
+runtime tuning, visualization, and API documentation.
 
 # Frequently Asked Questions (FAQ)
 
