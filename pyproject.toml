@@ -65,6 +65,7 @@ Homepage = "https://github.com/Lucew/changepoynt"
 Issues = "https://github.com/Lucew/changepoynt/issues"
 Source = "https://github.com/Lucew/changepoynt"
 Changelog = "https://github.com/Lucew/changepoynt/releases"
+Documentation = "https://lucew.github.io/changepoynt/"
 
 [tool.setuptools]
 packages = ["changepoynt", "changepoynt.algorithms", "changepoynt.utils", "changepoynt.visualization"]
