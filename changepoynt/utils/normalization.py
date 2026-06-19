@@ -49,8 +49,6 @@ def z_scaling(time_series: np.ndarray, inplace: bool = False) -> np.ndarray:
     but lighter and reimplemented in order to not introduce unnecessary dependencies for small functionality.
 
     :param time_series: 1D array containing consecutive values for one feature
-    :param min_val: the minimum value the scaled time series will reach
-    :param max_val: the maximum value the scale time series will reach
     :param inplace: boolean to specify whether the input array will be scaled and changed in place
 
     :return: the scaled input array.

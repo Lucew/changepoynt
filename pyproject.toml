@@ -58,7 +58,7 @@ keywords = [
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
-optional-dependencies = {test = { file = ["requirements_tests.txt"] }, example = { file = ["requirements_examples.txt"] }}
+optional-dependencies = {test = { file = ["requirements_tests.txt"] }, example = { file = ["requirements_examples.txt"] }, docs = { file = ["requirements_docs.txt"] }}
 
 [project.urls]
 Homepage = "https://github.com/Lucew/changepoynt"

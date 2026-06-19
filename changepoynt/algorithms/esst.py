@@ -59,9 +59,6 @@ class ESST(SingularSubspaceAlgorithm):
 
         :param use_fast_hankel: Whether to deploy the fast hankel matrix product.
 
-        :param threads: The number of threads the fast hankel matrix product is allowed to use. Default is the half of
-        the number of cpu cores your system has available.
-
         :param mitigate_offset: Use a sliding mean window to mitigate the constant offset of time series.
         """
 
@@ -223,7 +220,6 @@ def left_entropy(hankel: np.ndarray, rank: int, random_rank: int, method: str) -
     :param rank: the number of (approximated) eigenvectors as subspace of H1
     :param random_rank: the sampling parameter for the randomized svd
     :param method: which rsvd method to use
-    :param threads: the numba of threads numba is allowed to use
     :return: the change point score, the input vector x0
     """
     # compute the left and right eigenvectors using the randomized svd for fast computation
