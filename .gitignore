@@ -65,6 +65,12 @@ instance/
 # Sphinx documentation
 docs/_build/
 
+# MkDocs documentation build
+site/
+
+# uv local cache
+.uv-cache/
+
 # PyBuilder
 target/
 

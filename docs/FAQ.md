@@ -19,14 +19,14 @@ approaches also apply to our problem. Additionally, you might want to take a loo
 > Consider increasing `scoring_step` to make larger steps through the signal (`scoring_step=2` is twice as fast).
 > 
 For the algorithms that build up on the decomposition of time series Hankel matrices (like 
-[SST](https://github.com/Lucew/changepoynt/blob/master/changepoynt/algorithms/sst.py) and 
-[ESST](https://github.com/Lucew/changepoynt/blob/master/changepoynt/algorithms/esst.py)), we created an
-signficantly more efficient algorithm (see [the code for the paper](https://github.com/Lucew/approximate_hankel) for
+[SST](api/algorithms.md#changepoynt.algorithms.sst.SST) and
+[ESST](api/algorithms.md#changepoynt.algorithms.esst.ESST)), we created a
+significantly more efficient algorithm (see [the code for the paper](https://github.com/Lucew/approximate_hankel) for
 reference).
 
 This efficient algorithm can be used when specifying the option `use_fast_hankel = True` in the 
-[SST](https://github.com/Lucew/changepoynt/blob/master/changepoynt/algorithms/sst.py) and
-[ESST](https://github.com/Lucew/changepoynt/blob/master/changepoynt/algorithms/esst.py). Empirically, we saw
+[SST](api/algorithms.md#changepoynt.algorithms.sst.SST) and
+[ESST](api/algorithms.md#changepoynt.algorithms.esst.ESST). Empirically, we saw
 improvements for window size larger than 200 for the SST and larger than 400 for the ESST. These boundaries depend on 
 your system parameters, like available libraries and cores. For Window sizes smaller than this threshold, the naive
 implementation is typically faster. For tiny window size (~20) the naive implementation will outperform the

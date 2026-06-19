@@ -9,6 +9,8 @@ with open(path.join(this_directory, 'requirements.txt'), encoding='utf-8') as f:
     requirements = f.read().splitlines()
 with open(path.join(this_directory, 'requirements_tests.txt'), encoding='utf-8') as f:
     requirements_tests = f.read().splitlines()
+with open(path.join(this_directory, 'requirements_docs.txt'), encoding='utf-8') as f:
+    requirements_docs = f.read().splitlines()
 
 # read content of the readme
 with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
@@ -33,7 +35,7 @@ def main():
         install_requires=requirements,
         dependency_links=[],
         tests_require=requirements_tests,
-        extras_require={'test': requirements_tests},
+        extras_require={'test': requirements_tests, 'docs': requirements_docs},
         setup_requires=[],
         license="BSD License",
         test_suite="tests",

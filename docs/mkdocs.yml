@@ -1,0 +1,103 @@
+site_name: changepoynt
+site_description: Change point detection for time series in Python.
+site_url: https://lucew.github.io/changepoynt/
+repo_url: https://github.com/Lucew/changepoynt
+repo_name: Lucew/changepoynt
+
+docs_dir: .
+site_dir: ../site
+
+exclude_docs: |
+  mkdocs.yml
+  subspace-guide.md
+  overrides/
+
+theme:
+  name: material
+  custom_dir: overrides
+  features:
+#    - announce.dismiss
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - ..
+          options:
+            docstring_style: sphinx
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            inherited_members: true
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Quickstart: quickstart.md
+  - Algorithms:
+      - Overview: algorithms.md
+      - Subspace Methods:
+          - SST: algorithms/sst.md
+          - ESST: algorithms/esst.md
+          - MSST: algorithms/msst.md
+          - MESST: algorithms/messt.md
+      - Density-Ratio Methods:
+          - RuLSIF: algorithms/rulsif.md
+          - ULSIF: algorithms/ulsif.md
+      - Matrix-Profile Methods:
+          - FLUSS: algorithms/fluss.md
+          - FLOSS: algorithms/floss.md
+      - Probabilistic Methods:
+          - BOCPD: algorithms/bocpd.md
+      - Baselines:
+          - Moving Window: algorithms/moving-window.md
+          - ZERO: algorithms/zero.md
+      - Experimental and Unavailable:
+          - ClaSP: algorithms/clasp.md
+          - Subspace Identification: algorithms/subspace-identification.md
+          - TESST: algorithms/tesst.md
+  - User Guides:
+      - Overview: guides/index.md
+      - Tuning Subspace Methods: guides/tuning-subspace-methods.md
+      - Visualizing Scores: guides/visualizing-scores.md
+      - Experimental Buffered Streaming: guides/experimental-buffered-streaming.md
+      - Fast SST and IKA-SST: fast-sst.md
+  - FAQ: FAQ.md
+  - API Reference:
+      - Overview: api/index.md
+      - Algorithms: api/algorithms.md
+      - Utilities: api/utils.md
+      - Visualization: api/visualization.md
+  - Contributing: contributing.md

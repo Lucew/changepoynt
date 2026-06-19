@@ -35,7 +35,6 @@ class ULSIF(Algorithm):
         :param estimation_lag: how often we should re-estimate lambda and sigma for the gaussian kernels
         :param scoring_step: the number of samples between each change score value (e.g. 2 would half the computations)
         :param n_kernels: the number of kernels for the density ration estimation
-        :param alpha: the smoothing parameter for the RELATIVE in RuLSIF
         :param symmetric: specifies whether to use two processes to compute a forward and backward pass simultaneously
         """
         self.window_length = window_length

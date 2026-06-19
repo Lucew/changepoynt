@@ -59,8 +59,6 @@ class MESST(SingularSubspaceAlgorithm):
 
         :param use_fast_hankel: Whether to deploy the fast hankel matrix product.
 
-        :param threads: The number of threads the fast hankel matrix product is allowed to use. Default is the half of
-        the number of cpu cores your system has available.
         """
 
         # save the specified parameters into instance variables
