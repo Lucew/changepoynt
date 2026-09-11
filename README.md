@@ -1,3 +1,16 @@
+<p align="center">
+  <img src="https://github.com/Lucew/changepoynt/blob/master/images/8be11a6b-ff07-4d36-87c0-13fcf71caf72.png"
+       alt="changepoynt — Open source Python package">
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/changepoynt/">PyPI</a>
+  ·
+  <a href="https://lucew.github.io/changepoynt/">Documentation</a>
+  ·
+  <a href="https://github.com/Lucew/changepoynt">GitHub</a>
+</p>
+
 # Python Changepoint Detection (changepoynt)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://lucew.github.io/changepoynt/)
 [![PyPI version](https://img.shields.io/pypi/v/changepoynt?color=%2376519B)](https://pypi.org/project/changepoynt/)
