@@ -57,7 +57,7 @@ For an initial feasibility test, vary only `window_length`. Leave `n_windows`, `
     )
     ```
 
-    The utility warms up first-use JIT compilation, times a processable slice repeatedly, and scales the measurement to the signal length and `scoring_step`. It returns the estimated runtime and its estimated standard deviation in seconds. Use it to reject expensive configurations before running `transform()` on the complete signal.
+    The function returns the estimated runtime for the whole signal and its estimated standard deviation in seconds. Use it to reject expensive configurations before running `transform()` on the complete signal.
 
 A useful coarse starting point is:
 
@@ -374,9 +374,11 @@ Fast Hankel changes how Hankel products are computed, not the intended scoring f
 
 ### Effect on Runtime
 
-With `use_fast_hankel=False`, the package materializes trajectory matrices. A dense Hankel matrix-vector product costs `O(m * n)` and matrix storage costs `O(m * n)`.
+With `use_fast_hankel=False`, the package materializes trajectory matrices and computes the full matrix-matrix product
+during the SVD algorithm. For a Hankel matrix of size `NxM`
 
-Fast Hankel represents the structure implicitly and uses FFT-based convolution. For a univariate Hankel matrix, one structured product is approximately `O((w + n) log(w + n))` instead of `O(w * n)`, with linear rather than matrix-sized structural storage. Block-Hankel methods repeat related work across channels.
+With `use_fast_hankel=True`, the packages uses a specialized Hankel matrix product that relies on the convolution
+theorem and allows to 
 
 FFT setup and bookkeeping have overhead, so fast Hankel is not automatically faster for small matrices. The Fast SST experiments observed crossover points around window length 200 for their IKA configurations and around 300 for randomized SVD. Use these as places to begin benchmarking, not fixed thresholds.
 

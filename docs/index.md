@@ -4,6 +4,9 @@
 
 The package focuses on efficient implementations with readable code, so it can be useful both for research experiments and practical time-series workflows.
 
+The main focus is on methods that run as a sliding window over a larger time series. So most algorithms scale linearly
+with the time series length and could be run in an online fashion with a rolling buffer.
+
 ## Start Here
 
 Install the package:
