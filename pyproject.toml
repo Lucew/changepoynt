@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 dynamic = ["dependencies", "optional-dependencies"]
 name = "changepoynt"
-version = "0.2.0"
+version = "0.2.1"
 authors = [
   { name="Lucas Weber", email="weber-lucas@web.de" },
 ]
