@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/Lucew/changepoynt/blob/master/images/banner-image.png"
+  <img src="https://github.com/Lucew/changepoynt/blob/master/images/muted-fork-image.png"
        alt="changepoynt — Open source Python package">
 </p>
 
