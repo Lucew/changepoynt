@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg
-   width="2172"
+   width="2102"
    height="500"
-   viewBox="0 0 2172 500"
+   viewBox="0 0 2102 500"
    role="img"
    aria-labelledby="banner-title banner-description"
    version="1.1"
@@ -67,7 +67,7 @@
      data-text="$ pip install changepoynt">
     <g
        id="g1"
-       transform="translate(0,-125.92978)">
+       transform="translate(-38.897712,-125.92978)">
       <path
          id="signal-incoming"
          inkscape:label="Incoming signal — blue"
